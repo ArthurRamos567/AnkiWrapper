@@ -15,6 +15,7 @@ type MockLLMProvider struct {
 	clozeRaw map[string]any
 	freeRaw  map[string]any
 	evalRaw  map[string]any
+	batchRaw map[string]any
 }
 
 func (m *MockLLMProvider) ExecutePrompt(ctx context.Context, prompt string) (string, error) {
@@ -29,6 +30,8 @@ func (m *MockLLMProvider) ExecuteStructured(ctx context.Context, prompt string, 
 		data = m.clozeRaw
 	} else if strings.Contains(prompt, "Modo do Quiz: \"free\"") {
 		data = m.freeRaw
+	} else if strings.Contains(prompt, "Gere exatamente") {
+		data = m.batchRaw
 	} else if strings.Contains(prompt, "Você é um avaliador pedagógico") {
 		data = m.evalRaw
 	}
@@ -158,5 +161,74 @@ func TestQuizGenerateFree(t *testing.T) {
 	}
 	if q.ReferenceAnswer != "もちろん、春[はる]には家[いえ]に帰[かえ]ります。" {
 		t.Errorf("ReferenceAnswer incorreta: %s", q.ReferenceAnswer)
+	}
+}
+
+func TestQuizGenerateBatch(t *testing.T) {
+	mockLLM := &MockLLMProvider{
+		mcRaw: map[string]any{
+			"prompt_text":    "Qual partícula indica o local de destino?",
+			"sentence":       "駅[えき]____行[い]きます。",
+			"options":        []string{"に", "で", "を", "が"},
+			"correct_option": "に",
+			"hint":           "Verbo de deslocamento",
+			"explanation":    "A partícula に indica o destino.",
+		},
+		batchRaw: map[string]any{
+			"questions": []map[string]any{
+				{
+					"mode":           "cloze",
+					"prompt_text":    "Complete com a palavra correta:",
+					"sentence":       "朝[あさ] ____ を 食[た]べます。",
+					"correct_answer": "ご飯[はん]",
+					"hint":           "Refeição matinal",
+					"explanation":    "Gohan significa arroz ou refeição.",
+				},
+				{
+					"mode":           "multiple_choice",
+					"prompt_text":    "Escolha o verbo adequado:",
+					"sentence":       "昼[ひる]ご飯[はん]を ____。",
+					"options":        []string{"食[た]べます", "飲[の]みます", "行[い]きます", "見[み]ます"},
+					"correct_answer": "食[た]べます",
+					"hint":           "Ingerir sólidos",
+					"explanation":    "Tabemasu é comer.",
+				},
+			},
+		},
+	}
+
+	engine := NewEngine(mockLLM, &MockPromptRepository{}, nil, nil, nil)
+
+	// Test count = 1
+	qs1, err := engine.GenerateBatch(context.Background(), []string{"multiple_choice"}, "Comida", 1)
+	if err != nil {
+		t.Fatalf("erro ao gerar batch com count=1: %v", err)
+	}
+	if len(qs1) != 1 {
+		t.Fatalf("esperado 1 questão, obtido %d", len(qs1))
+	}
+	if qs1[0].Index != 1 || qs1[0].Total != 1 {
+		t.Errorf("esperado Index=1 e Total=1, obtido Index=%d e Total=%d", qs1[0].Index, qs1[0].Total)
+	}
+
+	// Test count = 2
+	qs2, err := engine.GenerateBatch(context.Background(), []string{"multiple_choice", "cloze"}, "Comida", 2)
+	if err != nil {
+		t.Fatalf("erro ao gerar batch com count=2: %v", err)
+	}
+	if len(qs2) != 2 {
+		t.Fatalf("esperado 2 questões no batch, obtido %d", len(qs2))
+	}
+	if qs2[0].Index != 1 || qs2[0].Total != 2 {
+		t.Errorf("esperado q[0] Index=1 Total=2, obtido Index=%d Total=%d", qs2[0].Index, qs2[0].Total)
+	}
+	if qs2[1].Index != 2 || qs2[1].Total != 2 {
+		t.Errorf("esperado q[1] Index=2 Total=2, obtido Index=%d Total=%d", qs2[1].Index, qs2[1].Total)
+	}
+	if qs2[0].Mode != "cloze" || qs2[0].CorrectAnswer != "ご飯[はん]" {
+		t.Errorf("dados incorretos na questão 1: %+v", qs2[0])
+	}
+	if qs2[1].Mode != "multiple_choice" || len(qs2[1].Options) != 4 {
+		t.Errorf("dados incorretos na questão 2: %+v", qs2[1])
 	}
 }

@@ -2,8 +2,8 @@ package web
 
 import (
 	"fmt"
-	"math/rand/v2"
 	"net/http"
+	"strconv"
 
 	"anki-wrapper/internal/domain"
 	"anki-wrapper/internal/quiz"
@@ -48,20 +48,31 @@ func (s *Server) handleQuizGenerate(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	selectedMode := modes[rand.IntN(len(modes))]
 	topic := r.FormValue("topic")
 
-	q, err := s.quizEngine.GenerateQuestion(r.Context(), selectedMode, topic)
+	count := 1
+	if cStr := r.FormValue("count"); cStr != "" {
+		if c, err := strconv.Atoi(cStr); err == nil && c > 0 {
+			count = c
+		}
+	}
+	if count > 10 {
+		count = 10
+	}
+
+	qs, err := s.quizEngine.GenerateBatch(r.Context(), modes, topic, count)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Erro ao gerar questão: %v", err), http.StatusInternalServerError)
 		return
 	}
 
 	s.mu.Lock()
-	s.activeQuestions[q.ID] = q
+	for _, q := range qs {
+		s.activeQuestions[q.ID] = q
+	}
 	s.mu.Unlock()
 
-	if err := s.tmpl.ExecuteTemplate(w, "question_card", q); err != nil {
+	if err := s.tmpl.ExecuteTemplate(w, "question_list", qs); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }

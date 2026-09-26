@@ -14,6 +14,8 @@ type NewVocabCard struct {
 // Question represents a generated quiz item.
 type Question struct {
 	ID                string                   `json:"id"`
+	Index             int                      `json:"index,omitempty"`
+	Total             int                      `json:"total,omitempty"`
 	Mode              string                   `json:"mode"` // "multiple_choice", "cloze", "free"
 	Topic             string                   `json:"topic"`
 	PromptText        string                   `json:"prompt_text"`
@@ -94,3 +96,28 @@ const EvaluationSchema = `{
   },
   "required": ["is_correct", "score", "corrected_sentence", "explanation", "feedback"]
 }`
+
+const BatchQuestionsSchema = `{
+  "type": "object",
+  "properties": {
+    "questions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "mode": {"type": "string", "enum": ["multiple_choice", "cloze", "free"]},
+          "prompt_text": {"type": "string"},
+          "sentence": {"type": "string"},
+          "options": {"type": "array", "items": {"type": "string"}},
+          "correct_answer": {"type": "string"},
+          "reference_answer": {"type": "string"},
+          "hint": {"type": "string"},
+          "explanation": {"type": "string"}
+        },
+        "required": ["mode", "prompt_text", "explanation"]
+      }
+    }
+  },
+  "required": ["questions"]
+}`
+

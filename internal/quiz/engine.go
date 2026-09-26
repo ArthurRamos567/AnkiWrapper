@@ -151,6 +151,8 @@ DIRETRIZES DE ENUNCIADO:
 
 	q := &Question{
 		ID:                fmt.Sprintf("q_%d", time.Now().UnixNano()),
+		Index:             1,
+		Total:             1,
 		Mode:              mode,
 		Topic:             topic,
 		MatchedVocabCount: len(matchedVocab),
@@ -216,6 +218,217 @@ DIRETRIZES DE ENUNCIADO:
 	}
 
 	return q, nil
+}
+
+// GenerateBatch creates count quiz questions for the given modes and topic in an efficient single LLM call.
+func (e *Engine) GenerateBatch(ctx context.Context, modes []string, topic string, count int) ([]*Question, error) {
+	if count <= 1 {
+		selectedMode := "multiple_choice"
+		if len(modes) > 0 {
+			selectedMode = modes[rand.IntN(len(modes))]
+		}
+		q, err := e.GenerateQuestion(ctx, selectedMode, topic)
+		if err != nil {
+			return nil, err
+		}
+		q.Index = 1
+		q.Total = 1
+		return []*Question{q}, nil
+	}
+
+	if count > 10 {
+		count = 10
+	}
+
+	ctx = domain.WithOperation(ctx, "quiz_generate")
+	if len(modes) == 0 {
+		modes = []string{"multiple_choice", "cloze", "free"}
+	}
+	if topic == "" {
+		topic = "Gramática Geral e Vocabulário Conhecido"
+	}
+
+	generatorPrompt, _ := e.prompts.GetPrompt(ctx, "quiz_generator")
+	softN1Rule, _ := e.prompts.GetPrompt(ctx, "soft_n_plus_one")
+	supportLang := e.prompts.GetSetting(ctx, "support_lang", "pt")
+
+	langName := "Português"
+	if supportLang == "en" {
+		langName = "Inglês"
+	}
+
+	// 1. RAG Search: Retrieve top compatible words for the topic (ONLY if marked as read)
+	vocabLimit := 5 * count
+	if vocabLimit > 20 {
+		vocabLimit = 20
+	}
+	var matchedVocab []domain.VocabItem
+	if e.vectorStore != nil {
+		scored := e.vectorStore.SearchReadTopK(ctx, topic, vocabLimit, 0.10)
+		for _, s := range scored {
+			matchedVocab = append(matchedVocab, s.Item)
+		}
+
+		if len(matchedVocab) == 0 && (topic == "" || topic == "Gramática Geral e Vocabulário Conhecido") {
+			readVocab := e.vectorStore.GetReadVocab(ctx)
+			if len(readVocab) > 0 {
+				rand.Shuffle(len(readVocab), func(i, j int) {
+					readVocab[i], readVocab[j] = readVocab[j], readVocab[i]
+				})
+				limit := vocabLimit
+				if len(readVocab) < limit {
+					limit = len(readVocab)
+				}
+				matchedVocab = readVocab[:limit]
+			}
+		}
+	}
+
+	var vocabContext strings.Builder
+	if len(matchedVocab) > 0 {
+		vocabContext.WriteString(fmt.Sprintf("[Vocabulário do Anki lido/estudado compatível com o tópico \"%s\"]:\n", topic))
+		vocabContext.WriteString(domain.VocabListToString(matchedVocab))
+	} else {
+		vocabContext.WriteString("[Aviso]: Nenhuma palavra correspondente foi marcada como lida no Anki pelo usuário. Utilize apenas vocabulário elementar e fundamental.\n")
+	}
+
+	if len(matchedVocab) < 2 {
+		vocabContext.WriteString("\n[Diretriz Soft N+1]: Poucas palavras cadastradas para este tema. Introduza termos novos com furigana para garantir naturalidade.\n")
+	}
+
+	// 2. Grammar Guide RAG: Retrieve matching Tae Kim grammar lesson ONLY if read by the user
+	var matchedGrammar *domain.GrammarReference
+	var grammarContext strings.Builder
+	if e.grammarRepo != nil {
+		var lessons []domain.GrammarLesson
+		if topic != "" && topic != "Gramática Geral e Vocabulário Conhecido" {
+			lessons, _ = e.grammarRepo.SearchReadLessons(ctx, topic, 1)
+		} else {
+			readLessons, _ := e.grammarRepo.GetReadLessons(ctx)
+			if len(readLessons) > 0 {
+				picked := readLessons[rand.IntN(len(readLessons))]
+				lessons = []domain.GrammarLesson{picked}
+			}
+		}
+
+		if len(lessons) > 0 {
+			l := lessons[0]
+			matchedGrammar = l.Reference
+			grammarContext.WriteString(fmt.Sprintf("\n[REGRA GRAMATICAL DO TAE KIM'S GUIDE (ESTUDADA/LIDA PELO USUÁRIO)]:\nLição %s: %s (Capítulo: %s)\nTrecho da regra:\n%s\n", l.SectionKey, l.Title, l.Chapter, l.Snippet(200)))
+		} else {
+			grammarContext.WriteString("\n[Aviso]: Crie a questão baseando-se estritamente no vocabulário fornecido e em estruturas gramaticais elementares.\n")
+		}
+	}
+
+	modesStr := strings.Join(modes, ", ")
+	promptBuilder := fmt.Sprintf(`%s
+
+%s
+
+Idioma de suporte para explicações e enunciados: %s.
+Tópico solicitado: "%s".
+Modos permitidos para as questões: [%s].
+
+%s
+%s
+
+Gere exatamente %d questões nos modos permitidos [%s] com kanji contendo furigana Anki (漢字[かんじ]).
+
+DIRETRIZES DE FORMATO E ECONOMIA DE TOKENS:
+- Responda EXCLUSIVAMENTE em JSON estruturado de acordo com o schema, preenchendo a lista "questions".
+- NUNCA inclua marcações HTML (<div>, <form>, etc). O HTML da página é renderizado pelo servidor.
+- Mantenha explicação, enunciado e dicas breves e diretos (máximo 2 a 3 frases) para economizar tokens.
+
+DIRETRIZES PARA CADA MODO:
+1. No modo "free" (Tradução/Composição Livre):
+   - O campo "prompt_text" deve conter EXCLUSIVAMENTE a frase na língua de suporte (%s) para ser traduzida (ex: "Traduza para o japonês: '...'").
+   - NUNCA inclua a resposta em japonês no "prompt_text" ou "hint".
+   - A resposta correta com furigana pertence ao campo "reference_answer".
+   - Deixe o campo "sentence" vazio.
+2. No modo "multiple_choice":
+   - "sentence": frase em japonês com a lacuna "____".
+   - "options": 4 opções plausíveis.
+   - "correct_answer": a opção correta.
+3. No modo "cloze":
+   - "sentence": frase em japonês com a lacuna "____".
+   - "correct_answer": a resposta que preenche a lacuna.
+4. "hint" (opcional): Dica sutil e curta, sem revelar a resposta.
+`, generatorPrompt, softN1Rule, langName, topic, modesStr, vocabContext.String(), grammarContext.String(), count, modesStr, langName)
+
+	var raw struct {
+		Questions []struct {
+			Mode            string   `json:"mode"`
+			PromptText      string   `json:"prompt_text"`
+			Sentence        string   `json:"sentence"`
+			Options         []string `json:"options"`
+			CorrectAnswer   string   `json:"correct_answer"`
+			ReferenceAnswer string   `json:"reference_answer"`
+			Hint            string   `json:"hint"`
+			Explanation     string   `json:"explanation"`
+		} `json:"questions"`
+	}
+
+	if err := e.llm.ExecuteStructured(ctx, promptBuilder, BatchQuestionsSchema, &raw); err != nil {
+		return nil, fmt.Errorf("falha ao gerar lote de questões: %w", err)
+	}
+
+	if len(raw.Questions) == 0 {
+		return nil, fmt.Errorf("o modelo não retornou nenhuma questão válida")
+	}
+
+	now := time.Now().UnixNano()
+	total := len(raw.Questions)
+	var questions []*Question
+
+	for i, item := range raw.Questions {
+		mode := item.Mode
+		if mode != "multiple_choice" && mode != "cloze" && mode != "free" {
+			if len(modes) > 0 {
+				mode = modes[i%len(modes)]
+			} else {
+				mode = "multiple_choice"
+			}
+		}
+
+		correctAns := item.CorrectAnswer
+		if correctAns == "" && item.ReferenceAnswer != "" {
+			correctAns = item.ReferenceAnswer
+		}
+
+		refAns := item.ReferenceAnswer
+		if refAns == "" && item.CorrectAnswer != "" {
+			refAns = item.CorrectAnswer
+		}
+
+		sentence := item.Sentence
+		sentenceHTML := ""
+		if mode != "free" && sentence != "" {
+			sentenceHTML = chat.FuriganaToHTML(sentence)
+		} else if mode == "free" {
+			sentence = ""
+		}
+
+		q := &Question{
+			ID:                fmt.Sprintf("q_%d_%d", now, i+1),
+			Index:             i + 1,
+			Total:             total,
+			Mode:              mode,
+			Topic:             topic,
+			PromptText:        item.PromptText,
+			Sentence:          sentence,
+			SentenceHTML:      sentenceHTML,
+			Options:           item.Options,
+			CorrectAnswer:     correctAns,
+			ReferenceAnswer:   refAns,
+			Hint:              item.Hint,
+			Explanation:       item.Explanation,
+			GrammarRef:        matchedGrammar,
+			MatchedVocabCount: len(matchedVocab),
+		}
+		questions = append(questions, q)
+	}
+
+	return questions, nil
 }
 
 // EvaluateAnswer evaluates a user's answer and persists the attempt in the quiz repository.

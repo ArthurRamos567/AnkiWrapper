@@ -2,6 +2,7 @@ package web
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -21,6 +22,52 @@ func (m *MockWebLLM) ExecutePrompt(ctx context.Context, prompt string) (string, 
 }
 
 func (m *MockWebLLM) ExecuteStructured(ctx context.Context, prompt string, schema string, target any) error {
+	if strings.Contains(prompt, "Gere exatamente") {
+		raw := map[string]any{
+			"questions": []map[string]any{
+				{
+					"mode":           "multiple_choice",
+					"prompt_text":    "Qual partícula usar?",
+					"sentence":       "日本[にほん]____行[い]く。",
+					"options":        []string{"に", "で", "を", "が"},
+					"correct_answer": "に",
+					"hint":           "Destino",
+					"explanation":    "Partícula に indica destino.",
+				},
+				{
+					"mode":           "cloze",
+					"prompt_text":    "Complete a lacuna:",
+					"sentence":       "ご飯[はん]を____。",
+					"correct_answer": "食[た]べる",
+					"hint":           "Verbo comer",
+					"explanation":    "Taberu significa comer.",
+				},
+			},
+		}
+		b, _ := json.Marshal(raw)
+		return json.Unmarshal(b, target)
+	} else if strings.Contains(prompt, "Modo do Quiz:") {
+		raw := map[string]any{
+			"prompt_text":    "Qual partícula usar?",
+			"sentence":       "日本[にほん]____行[い]く。",
+			"options":        []string{"に", "で", "を", "が"},
+			"correct_option": "に",
+			"hint":           "Destino",
+			"explanation":    "Partícula に indica destino.",
+		}
+		b, _ := json.Marshal(raw)
+		return json.Unmarshal(b, target)
+	} else if strings.Contains(prompt, "Você é um avaliador pedagógico") {
+		raw := map[string]any{
+			"is_correct":         true,
+			"score":              100,
+			"corrected_sentence": "日本[にほん]に行[い]く。",
+			"explanation":        "Correto!",
+			"feedback":           "Muito bem!",
+		}
+		b, _ := json.Marshal(raw)
+		return json.Unmarshal(b, target)
+	}
 	return nil
 }
 
@@ -373,6 +420,9 @@ func TestWebRoutes(t *testing.T) {
 	if !strings.Contains(body, `name="modes"`) || !strings.Contains(body, `type="checkbox"`) {
 		t.Errorf("página do quiz deve conter os checkboxes de categorias/modos com name=modes")
 	}
+	if !strings.Contains(body, `name="count"`) || !strings.Contains(body, `id="count-input"`) {
+		t.Errorf("página do quiz deve conter o input de quantidade com name=count e id=count-input")
+	}
 	if !strings.Contains(body, "new-vocab-toggle-btn") {
 		t.Errorf("página do quiz deve conter o botão de alternância de novas palavras")
 	}
@@ -581,6 +631,47 @@ func TestWebRoutes(t *testing.T) {
 	handler.ServeHTTP(rec, req)
 	if strings.Contains(rec.Body.String(), "日本") {
 		t.Errorf("palavra desmarcada NÃO deve aparecer no filtro read")
+	}
+
+	// 20. Quiz Batch Generate Endpoint
+	generateForm := url.Values{
+		"count": {"2"},
+		"modes": {"multiple_choice", "cloze"},
+		"topic": {"Comida"},
+	}
+	rec = httptest.NewRecorder()
+	req = httptest.NewRequest("POST", "/quiz/generate", strings.NewReader(generateForm.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Errorf("esperado status 200 no /quiz/generate com lote, obtido %d", rec.Code)
+	}
+	genBody := rec.Body.String()
+	if !strings.Contains(genBody, "#1 de 2") || !strings.Contains(genBody, "#2 de 2") {
+		t.Errorf("resposta do /quiz/generate deve conter os marcadores de lote #1 de 2 e #2 de 2, obtido: %s", genBody)
+	}
+	if !strings.Contains(genBody, "Qual partícula usar?") || !strings.Contains(genBody, "Complete a lacuna:") {
+		t.Errorf("resposta do /quiz/generate deve conter as questões geradas, obtido: %s", genBody)
+	}
+
+	// 21. Quiz Answer Endpoint
+	ansForm := url.Values{
+		"question_id":    {"q_sample"},
+		"user_answer":    {"に"},
+		"mode":           {"multiple_choice"},
+		"correct_answer": {"に"},
+		"explanation":    {"Partícula に indica destino."},
+	}
+	rec = httptest.NewRecorder()
+	req = httptest.NewRequest("POST", "/quiz/answer", strings.NewReader(ansForm.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Errorf("esperado status 200 no /quiz/answer, obtido %d", rec.Code)
+	}
+	ansBody := rec.Body.String()
+	if !strings.Contains(ansBody, "Correto") {
+		t.Errorf("resposta do /quiz/answer deve conter resultado Correto, obtido: %s", ansBody)
 	}
 }
 
