@@ -1,0 +1,28 @@
+# Binaries & executables
+/anki-wrapper
+*.exe
+*.test
+
+# Local SQLite databases & cache
+data/*.db
+data/*.db-journal
+data/*.db-wal
+data/*.db-shm
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# Environment & credentials (do NOT commit secrets!)
+.env
+.env.local
+.env.*.local
+
+# OS & IDE metadata
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Agent scratch directory
+scratch/

@@ -1,0 +1,18 @@
+# Binaries and executables
+/anki-wrapper
+*.exe
+*.test
+
+# Local SQLite databases and temp files
+data/*.db
+data/*.db-journal
+data/*.db-wal
+data/*.db-shm
+
+# Git and dev tooling
+.git
+.agents
+.gitignore
+.env
+.env.local
+scratch/

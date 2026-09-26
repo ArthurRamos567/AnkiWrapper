@@ -1,0 +1,168 @@
+{{define "decks_content"}}
+<div>
+    <!-- Header -->
+    <div style="margin-bottom: 1.25rem;">
+        <div style="display: flex; justify-content: space-between; align-items: flex-end; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 0.5rem;">
+            <div>
+                <h2 style="margin: 0 0 0.25rem 0; font-size: 1.3rem;">Decks do Anki</h2>
+                <p style="margin: 0; font-size: 0.85rem; color: #666;">
+                    Total Anki: <strong>{{.GlobalTotal}}</strong> palavras &bull; <strong>{{.GlobalRead}}</strong> lidas ({{.GlobalPercentage}}%) &bull; <strong>{{.GlobalUnread}}</strong> não lidas
+                </p>
+            </div>
+            <form action="/anki/reload" method="POST" style="margin: 0;">
+                <button type="submit" style="font-size: 0.85rem; padding: 4px 10px; cursor: pointer;">Recarregar do Anki ⟳</button>
+            </form>
+        </div>
+
+        <!-- Deck Selector Tabs -->
+        <div style="display: flex; gap: 0.5rem; border-bottom: 1px solid #ccc; padding-bottom: 0.4rem; font-size: 0.9rem; align-items: center; flex-wrap: wrap;">
+            {{range .Decks}}
+            <a href="/decks?deck={{.Name}}&filter={{$.CurrentFilter}}"
+               style="text-decoration: none; {{if eq $.SelectedDeck .Name}}font-weight: bold; color: #111; border-bottom: 2px solid #0055aa; padding-bottom: 0.4rem;{{else}}color: #0055aa;{{end}}">
+                {{.Name}} ({{.ReadVocab}}/{{.TotalVocab}} &bull; {{.Percentage}}%)
+            </a>
+            <span style="color: #999;">|</span>
+            {{end}}
+            <a href="/decks?deck=all&filter={{$.CurrentFilter}}"
+               style="text-decoration: none; {{if eq $.SelectedDeck "all"}}font-weight: bold; color: #111; border-bottom: 2px solid #0055aa; padding-bottom: 0.4rem;{{else}}color: #0055aa;{{end}}">
+                Todos os Decks ({{.GlobalRead}}/{{.GlobalTotal}})
+            </a>
+        </div>
+    </div>
+
+    <!-- Active Deck Controls & Actions -->
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.5rem; background: #fafafa; border: 1px solid #ddd; padding: 0.5rem 0.75rem; border-radius: 3px;">
+        <div>
+            <span style="font-size: 0.95rem; font-weight: bold;">
+                {{if eq .SelectedDeck "all"}}Todos os Decks{{else}}{{.SelectedDeck}}{{end}}
+            </span>
+            <span style="font-size: 0.85rem; color: #555; margin-left: 0.5rem;">
+                {{.DeckRead}} de {{.DeckTotal}} palavras lidas ({{.DeckPercentage}}%)
+            </span>
+        </div>
+
+        <!-- Bulk Action Buttons -->
+        <div style="display: flex; gap: 0.5rem; align-items: center;">
+            <form action="/decks/toggle-read" method="POST" style="margin: 0; display: inline;">
+                <input type="hidden" name="deck" value="{{.SelectedDeck}}">
+                <input type="hidden" name="read" value="1">
+                <button type="submit" style="font-size: 0.8rem; padding: 3px 8px; cursor: pointer; background: #eafbe8; color: #006600; border: 1px solid #008800; border-radius: 3px;">
+                    ✓ Marcar deck como lido
+                </button>
+            </form>
+            <form action="/decks/toggle-read" method="POST" style="margin: 0; display: inline;">
+                <input type="hidden" name="deck" value="{{.SelectedDeck}}">
+                <input type="hidden" name="read" value="0">
+                <button type="submit" style="font-size: 0.8rem; padding: 3px 8px; cursor: pointer; background: #fafafa; color: #666; border: 1px solid #ccc; border-radius: 3px;">
+                    ○ Desmarcar deck
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Filter & Search Bar -->
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem; flex-wrap: wrap; gap: 0.5rem;">
+        <div style="display: flex; gap: 0.75rem; align-items: center; font-size: 0.85rem;">
+            <span style="color: #555;">Filtro:</span>
+            <a href="/decks?deck={{.SelectedDeck}}&filter=all{{if .SearchQuery}}&q={{.SearchQuery}}{{end}}"
+               style="text-decoration: none; {{if eq .CurrentFilter "all"}}font-weight: bold; border-bottom: 2px solid #0055aa; color: #111;{{else}}color: #0055aa;{{end}}">
+                Todos ({{.DeckTotal}})
+            </a>
+            <span style="color: #ccc;">|</span>
+            <a href="/decks?deck={{.SelectedDeck}}&filter=read{{if .SearchQuery}}&q={{.SearchQuery}}{{end}}"
+               style="text-decoration: none; {{if eq .CurrentFilter "read"}}font-weight: bold; border-bottom: 2px solid #0055aa; color: #111;{{else}}color: #0055aa;{{end}}">
+                ✓ Apenas Lidos ({{.DeckRead}})
+            </a>
+            <span style="color: #ccc;">|</span>
+            <a href="/decks?deck={{.SelectedDeck}}&filter=unread{{if .SearchQuery}}&q={{.SearchQuery}}{{end}}"
+               style="text-decoration: none; {{if eq .CurrentFilter "unread"}}font-weight: bold; border-bottom: 2px solid #0055aa; color: #111;{{else}}color: #0055aa;{{end}}">
+                ○ Não Lidos ({{.DeckUnread}})
+            </a>
+        </div>
+
+        <form method="GET" action="/decks" style="display: flex; gap: 0.5rem; align-items: center; margin: 0;">
+            <input type="hidden" name="deck" value="{{.SelectedDeck}}">
+            <input type="hidden" name="filter" value="{{.CurrentFilter}}">
+            <input type="text" name="q" value="{{.SearchQuery}}" placeholder="Buscar palavra, significado..." style="width: 210px; font-size: 0.85rem;">
+            <button type="submit" style="font-size: 0.85rem;">Buscar</button>
+            {{if .SearchQuery}}
+                <a href="/decks?deck={{.SelectedDeck}}&filter={{.CurrentFilter}}" style="font-size: 0.85rem; color: #666; text-decoration: none;">Limpar</a>
+            {{end}}
+        </form>
+    </div>
+
+    {{if .SearchQuery}}
+        <p style="font-size: 0.9rem; margin-bottom: 1rem; color: #333;">
+            Resultados da busca por: <strong>"{{.SearchQuery}}"</strong> ({{.DisplayedCount}} encontrados)
+        </p>
+    {{end}}
+
+    <!-- Vocabulary Checklist Table -->
+    {{if .Items}}
+    <table style="width: 100%; font-size: 0.85rem; margin-top: 0.5rem;">
+        <thead>
+            <tr style="background: #f4f4f4;">
+                <th style="width: 85px; text-align: center;">Status</th>
+                <th style="width: 120px;">Palavra</th>
+                <th style="width: 120px;">Leitura</th>
+                <th>Significado</th>
+                {{if eq .SelectedDeck "all"}}
+                <th style="width: 120px;">Deck</th>
+                {{end}}
+                <th style="width: 70px; text-align: center;">Ações</th>
+            </tr>
+        </thead>
+        <tbody>
+            {{range .Items}}
+            <tr>
+                <td style="text-align: center;">
+                    <button type="button"
+                            hx-post="/vocab/toggle-read?id={{.ID}}"
+                            hx-target="this"
+                            hx-swap="outerHTML"
+                            style="cursor: pointer; font-size: 0.8rem; padding: 2px 6px; border: 1px solid {{if .IsRead}}#008800{{else}}#ccc{{end}}; background: {{if .IsRead}}#eafbe8{{else}}#fafafa{{end}}; color: {{if .IsRead}}#006600{{else}}#666{{end}}; border-radius: 3px;"
+                            title="{{if .IsRead}}Marcar como não lido{{else}}Marcar como lido{{end}}">
+                        {{if .IsRead}}✓ Lido{{else}}○ Não lido{{end}}
+                    </button>
+                </td>
+                <td>
+                    <span class="japanese-text" style="font-size: 1.1rem; font-weight: bold;">
+                        {{.Word}}
+                    </span>
+                </td>
+                <td>
+                    {{if and .Reading (ne .Reading .Word)}}
+                    <span class="japanese-text" style="font-size: 0.95rem; color: #555;">
+                        {{.Reading}}
+                    </span>
+                    {{else}}
+                    <span style="color: #999;">-</span>
+                    {{end}}
+                </td>
+                <td>
+                    <span style="color: #222;">{{.Meaning}}</span>
+                    {{if .Sentence}}
+                    <div class="japanese-text" style="font-size: 0.85rem; color: #666; margin-top: 2px; font-style: italic;">
+                        {{.Sentence}}
+                    </div>
+                    {{end}}
+                </td>
+                {{if eq $.SelectedDeck "all"}}
+                <td style="color: #666; font-size: 0.8rem;">
+                    {{.DeckName}}
+                </td>
+                {{end}}
+                <td style="text-align: center;">
+                    <a href="/quiz?topic={{.Word}}" style="{{if .IsRead}}color: #007700; font-weight: 500;{{else}}color: #888;{{end}} text-decoration: none;" title="Praticar esta palavra no quiz">
+                        Quiz 🎯
+                    </a>
+                </td>
+            </tr>
+            {{end}}
+        </tbody>
+    </table>
+    {{else}}
+    <p style="color: #666; font-style: italic; margin-top: 2rem;">Nenhuma palavra encontrada para o filtro ou termo pesquisado.</p>
+    {{end}}
+</div>
+{{end}}

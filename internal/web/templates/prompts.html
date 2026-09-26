@@ -1,0 +1,43 @@
+{{define "prompts_content"}}
+<div>
+    <!-- General Settings -->
+    <div style="display: flex; gap: 1.5rem; align-items: center; margin-bottom: 1rem; font-size: 0.9rem; flex-wrap: wrap;">
+        <form hx-post="/prompts/setting" hx-target="#setting-msg" style="display: inline-flex; align-items: center; gap: 0.5rem;">
+            <input type="hidden" name="key" value="support_lang">
+            <label for="lang-select">Idioma:</label>
+            <select name="value" id="lang-select" onchange="this.form.requestSubmit()">
+                <option value="pt" {{if eq .SupportLang "pt"}}selected{{end}}>Português</option>
+                <option value="en" {{if eq .SupportLang "en"}}selected{{end}}>English</option>
+            </select>
+        </form>
+        <span id="setting-msg" style="color: #007700; font-size: 0.85rem;"></span>
+
+        <span>Base Anki: <strong>{{.VocabCount}}</strong> palavras</span>
+        <form hx-post="/anki/reload" hx-target="#reload-msg" style="display: inline;">
+            <button type="submit">Recarregar</button>
+        </form>
+        <span id="reload-msg" style="font-size: 0.85rem; color: #666;"></span>
+    </div>
+
+    <!-- Prompts List -->
+    <div>
+        {{range .Prompts}}
+        <div style="margin-bottom: 1.5rem; padding-top: 0.75rem; border-top: 1px solid #ccc;">
+            <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 0.25rem;">
+                <strong>{{.Title}}</strong>
+                <span style="font-size: 0.75rem; color: #666; font-family: monospace;">{{.Key}} | {{.UpdatedAt.Format "02/01 15:04"}}</span>
+            </div>
+
+            <form hx-post="/prompts/update" hx-target="#status-{{.Key}}">
+                <input type="hidden" name="key" value="{{.Key}}">
+                <textarea name="content" rows="6" style="width: 100%; font-family: monospace; font-size: 0.85rem; line-height: 1.4; box-sizing: border-box;">{{.Content}}</textarea>
+                <div style="margin-top: 0.25rem; display: flex; justify-content: space-between; align-items: center;">
+                    <button type="submit">Salvar</button>
+                    <span id="status-{{.Key}}" style="font-size: 0.85rem;"></span>
+                </div>
+            </form>
+        </div>
+        {{end}}
+    </div>
+</div>
+{{end}}

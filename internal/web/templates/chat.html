@@ -1,0 +1,119 @@
+{{define "chat_content"}}
+<div style="display: flex; gap: 1.5rem;">
+    <!-- Sidebar: Sessions -->
+    <aside style="width: 180px; border-right: 1px solid #ccc; padding-right: 0.75rem;">
+        <form hx-post="/chat/new-session" hx-target="body">
+            <button type="submit" style="width: 100%; margin-bottom: 0.5rem;">+ Nova Conversa</button>
+        </form>
+
+        <ul style="list-style: none; padding: 0; margin: 0; font-size: 0.85rem;">
+            {{range .Sessions}}
+            <li style="margin-bottom: 0.25rem; display: flex; justify-content: space-between; align-items: center;">
+                <a href="/chat?session_id={{.ID}}" style="text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; {{if eq .ID $.CurrentSessionID}}color: #000; font-weight: bold; text-decoration: underline;{{else}}color: #0055aa;{{end}}">
+                    {{.Title}}
+                </a>
+                <form hx-post="/chat/delete-session" hx-target="body" style="display: inline;">
+                    <input type="hidden" name="session_id" value="{{.ID}}">
+                    <button type="submit" title="Excluir" style="background: none; border: none; color: #999; cursor: pointer; padding: 0 2px;">×</button>
+                </form>
+            </li>
+            {{else}}
+            <li style="color: #999;">Nenhuma</li>
+            {{end}}
+        </ul>
+    </aside>
+
+    <!-- Main Chat Window -->
+    <section style="flex: 1; display: flex; flex-direction: column; min-height: 60vh;">
+        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #ccc; padding-bottom: 0.25rem;">
+            <strong>{{.CurrentSessionTitle}}</strong>
+            <form hx-post="/chat/clear" hx-target="#chat-messages">
+                <input type="hidden" name="session_id" value="{{.CurrentSessionID}}">
+                <button type="submit" style="font-size: 0.75rem;">Limpar</button>
+            </form>
+        </div>
+
+        <div id="chat-messages" style="flex: 1; overflow-y: auto; max-height: 55vh; padding: 0.5rem 0; display: flex; flex-direction: column; gap: 0.75rem;">
+            {{if .Messages}}
+                {{range .Messages}}
+                    {{if eq .Role "user"}}
+                        {{template "chat_bubble_user" .}}
+                    {{else}}
+                        {{template "chat_bubble_assistant" .}}
+                    {{end}}
+                {{end}}
+            {{end}}
+
+            <div id="chat-typing-indicator" class="htmx-indicator" style="color: #666; font-style: italic; font-size: 0.85rem;">
+                Aguardando resposta...
+            </div>
+        </div>
+
+        <div style="border-top: 1px solid #ccc; padding-top: 0.5rem; margin-top: auto;">
+            <form hx-post="/chat/send" hx-target="#chat-messages" hx-swap="beforeend" hx-indicator="#chat-typing-indicator, #chat-spinner" onsubmit="clearInput(this)" style="display: flex; gap: 0.5rem;">
+                <input type="hidden" name="session_id" value="{{.CurrentSessionID}}">
+                <input type="text" id="chat-input" name="message" required autofocus style="flex: 1;">
+                <button type="submit">Enviar</button>
+                <span id="chat-spinner" class="htmx-indicator">...</span>
+            </form>
+        </div>
+    </section>
+</div>
+
+<script>
+function clearInput(form) {
+    setTimeout(() => {
+        document.getElementById('chat-input').value = '';
+        scrollChatToBottom();
+    }, 50);
+}
+
+function scrollChatToBottom() {
+    const el = document.getElementById('chat-messages');
+    if (el) {
+        el.scrollTop = el.scrollHeight;
+    }
+}
+
+document.body.addEventListener('htmx:afterSwap', function(evt) {
+    if (evt.detail.target.id === 'chat-messages') {
+        scrollChatToBottom();
+    }
+});
+
+setTimeout(scrollChatToBottom, 100);
+</script>
+{{end}}
+
+{{define "chat_bubble_user"}}
+<div style="font-size: 0.95rem;">
+    <strong>Você:</strong> {{.Content}}
+</div>
+{{end}}
+
+{{define "chat_bubble_assistant"}}
+<div style="font-size: 0.95rem; border-left: 2px solid #ccc; padding-left: 0.5rem;">
+    <strong style="color: #666;">Assistente:</strong>
+    <div class="japanese-text" style="margin: 0.2rem 0;">
+        {{raw .FuriganaHTML}}
+    </div>
+    {{if .Translation}}
+    <details style="font-size: 0.85rem; color: #666;">
+        <summary style="cursor: pointer;">Tradução</summary>
+        <p style="margin: 0.2rem 0 0 0.5rem; color: #333;">{{.Translation}}</p>
+    </details>
+    {{end}}
+    {{if .PedagogicalNote}}
+    <p style="margin: 0.25rem 0 0 0; font-size: 0.85rem; color: #a00;">
+        <strong>Nota:</strong> {{.PedagogicalNote}}
+    </p>
+    {{end}}
+    {{if .GrammarRef}}
+    <p style="margin: 0.25rem 0 0 0; font-size: 0.85rem;">
+        📖 <strong>Regra:</strong> {{.GrammarRef.Title}} (Tae Kim {{.GrammarRef.SectionKey}}) — 
+        <a href="{{.GrammarRef.URL}}" target="_blank" rel="noopener noreferrer" style="color: #0055aa;">Fonte Oficial ↗</a> | 
+        <a href="{{.GrammarRef.LocalURL}}" target="_blank" style="color: #0055aa;">Ler no Guia</a>
+    </p>
+    {{end}}
+</div>
+{{end}}

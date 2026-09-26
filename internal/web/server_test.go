@@ -1,0 +1,587 @@
+package web
+
+import (
+	"context"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
+	"strings"
+	"testing"
+
+	"anki-wrapper/internal/chat"
+	"anki-wrapper/internal/domain"
+	"anki-wrapper/internal/quiz"
+)
+
+// MockLLM for web tests
+type MockWebLLM struct{}
+
+func (m *MockWebLLM) ExecutePrompt(ctx context.Context, prompt string) (string, error) {
+	return "ok", nil
+}
+
+func (m *MockWebLLM) ExecuteStructured(ctx context.Context, prompt string, schema string, target any) error {
+	return nil
+}
+
+// MockPromptRepo for web tests
+type MockWebPromptRepo struct {
+	settings map[string]string
+	prompts  map[string]string
+}
+
+func (m *MockWebPromptRepo) GetAllPrompts(ctx context.Context) ([]domain.PromptItem, error) {
+	return []domain.PromptItem{
+		{Key: "chat_system", Title: "Chat", Content: "Você é tutor."},
+	}, nil
+}
+func (m *MockWebPromptRepo) GetPrompt(ctx context.Context, key string) (string, error) {
+	return m.prompts[key], nil
+}
+func (m *MockWebPromptRepo) UpdatePrompt(ctx context.Context, key, content string) error {
+	if m.prompts == nil {
+		m.prompts = make(map[string]string)
+	}
+	m.prompts[key] = content
+	return nil
+}
+func (m *MockWebPromptRepo) GetSetting(ctx context.Context, key, def string) string {
+	if v, ok := m.settings[key]; ok {
+		return v
+	}
+	return def
+}
+func (m *MockWebPromptRepo) SetSetting(ctx context.Context, key, val string) error {
+	if m.settings == nil {
+		m.settings = make(map[string]string)
+	}
+	m.settings[key] = val
+	return nil
+}
+
+// MockQuizRepo for web tests
+type MockWebQuizRepo struct{}
+
+func (m *MockWebQuizRepo) SaveQuizRecord(ctx context.Context, record domain.QuizRecord) error {
+	return nil
+}
+func (m *MockWebQuizRepo) GetQuizStats(ctx context.Context) (*domain.QuizStats, error) {
+	return &domain.QuizStats{Total: 10, Correct: 8, Incorrect: 2, Accuracy: 80.0}, nil
+}
+func (m *MockWebQuizRepo) GetRecentQuizzes(ctx context.Context, limit int) ([]domain.QuizRecord, error) {
+	return nil, nil
+}
+
+// MockChatRepo for web tests
+type MockWebChatRepo struct {
+	sessions []domain.ChatSession
+}
+
+func (m *MockWebChatRepo) CreateSession(ctx context.Context, id, title string) error {
+	m.sessions = append(m.sessions, domain.ChatSession{ID: id, Title: title})
+	return nil
+}
+func (m *MockWebChatRepo) GetSessions(ctx context.Context) ([]domain.ChatSession, error) {
+	return m.sessions, nil
+}
+func (m *MockWebChatRepo) UpdateSessionTitle(ctx context.Context, id, title string) error {
+	return nil
+}
+func (m *MockWebChatRepo) DeleteSession(ctx context.Context, id string) error {
+	return nil
+}
+func (m *MockWebChatRepo) SaveChatMessage(ctx context.Context, msg domain.ChatMessage) error {
+	return nil
+}
+func (m *MockWebChatRepo) GetChatMessages(ctx context.Context, sessionID string) ([]domain.ChatMessage, error) {
+	return nil, nil
+}
+func (m *MockWebChatRepo) ClearSessionMessages(ctx context.Context, sessionID string) error {
+	return nil
+}
+
+// MockTelemetryRepo for web tests
+type MockWebTelemetryRepo struct {
+	cleared bool
+}
+
+func (m *MockWebTelemetryRepo) RecordUsage(ctx context.Context, rec domain.LLMUsageRecord) error {
+	return nil
+}
+
+func (m *MockWebTelemetryRepo) GetUsageStats(ctx context.Context) (*domain.LLMUsageStats, error) {
+	return &domain.LLMUsageStats{
+		TotalCalls:        5,
+		TotalTokens:       1200,
+		AvgDurationMs:     450,
+		CallsByProvider:   map[string]int{"gemini": 5},
+		CallsByOperation:  map[string]int{"chat_reply": 5},
+		TokensByOperation: map[string]int64{"chat_reply": 1200},
+	}, nil
+}
+
+func (m *MockWebTelemetryRepo) GetRecentUsage(ctx context.Context, limit int) ([]domain.LLMUsageRecord, error) {
+	return []domain.LLMUsageRecord{
+		{
+			Provider:    "gemini",
+			Model:       "gemini-2.5-flash",
+			Operation:   "chat_reply",
+			TotalTokens: 240,
+			DurationMs:  400,
+			Status:      "SUCCESS",
+		},
+	}, nil
+}
+
+func (m *MockWebTelemetryRepo) ClearUsage(ctx context.Context) error {
+	m.cleared = true
+	return nil
+}
+
+// MockGrammarRepo for web tests
+type MockWebGrammarRepo struct {
+	readMap map[string]bool
+}
+
+func (m *MockWebGrammarRepo) SyncLessons(ctx context.Context, lessons []domain.GrammarLesson) (int, error) {
+	return len(lessons), nil
+}
+func (m *MockWebGrammarRepo) SearchLessons(ctx context.Context, query string, limit int) ([]domain.GrammarLesson, error) {
+	return m.GetAllLessons(ctx)
+}
+func (m *MockWebGrammarRepo) GetLessonByID(ctx context.Context, id string) (*domain.GrammarLesson, error) {
+	lessons, _ := m.GetAllLessons(ctx)
+	for _, l := range lessons {
+		if l.ID == id {
+			return &l, nil
+		}
+	}
+	return nil, nil
+}
+func (m *MockWebGrammarRepo) GetLessonBySection(ctx context.Context, sectionKey string) (*domain.GrammarLesson, error) {
+	lessons, _ := m.GetAllLessons(ctx)
+	for _, l := range lessons {
+		if l.SectionKey == sectionKey {
+			return &l, nil
+		}
+	}
+	return nil, nil
+}
+func (m *MockWebGrammarRepo) GetAllLessons(ctx context.Context) ([]domain.GrammarLesson, error) {
+	ref := &domain.GrammarReference{
+		ID:         "basics/noun-particles",
+		Title:      "Noun Particles",
+		SectionKey: "3.11",
+		Chapter:    "Basic Grammar",
+		URL:        "https://guidetojapanese.org/learn/grammar/nounparticles",
+		WebURL:     "https://jp.saeris.gg/learn/grammar/basics/noun-particles",
+	}
+	isRead := false
+	if m.readMap != nil {
+		isRead = m.readMap["basics/noun-particles"]
+	}
+	return []domain.GrammarLesson{
+		{
+			ID:            "basics/noun-particles",
+			Title:         "Noun Particles",
+			ChapterNumber: 3,
+			Chapter:       "Basic Grammar",
+			Part:          11,
+			SectionKey:    "3.11",
+			Slug:          "noun-particles",
+			URL:           "https://guidetojapanese.org/learn/grammar/nounparticles",
+			WebURL:        "https://jp.saeris.gg/learn/grammar/basics/noun-particles",
+			Content:       "## The Particles\n\nExplanation of と particle.",
+			IsRead:        isRead,
+			Reference:     ref,
+		},
+	}, nil
+}
+func (m *MockWebGrammarRepo) Count(ctx context.Context) int {
+	return 1
+}
+func (m *MockWebGrammarRepo) MarkLessonRead(ctx context.Context, id string, isRead bool) error {
+	if m.readMap == nil {
+		m.readMap = make(map[string]bool)
+	}
+	m.readMap[id] = isRead
+	return nil
+}
+func (m *MockWebGrammarRepo) GetReadLessons(ctx context.Context) ([]domain.GrammarLesson, error) {
+	all, _ := m.GetAllLessons(ctx)
+	var res []domain.GrammarLesson
+	for _, l := range all {
+		if l.IsRead {
+			res = append(res, l)
+		}
+	}
+	return res, nil
+}
+func (m *MockWebGrammarRepo) SearchReadLessons(ctx context.Context, query string, topK int) ([]domain.GrammarLesson, error) {
+	return m.GetReadLessons(ctx)
+}
+func (m *MockWebGrammarRepo) CountRead(ctx context.Context) int {
+	read, _ := m.GetReadLessons(ctx)
+	return len(read)
+}
+
+// MockVectorRepo for web tests
+type MockWebVectorRepo struct {
+	items   []domain.VocabItem
+	readMap map[int64]bool
+}
+
+func (m *MockWebVectorRepo) SyncVocab(ctx context.Context, items []domain.VocabItem) (int, error) {
+	m.items = items
+	return len(items), nil
+}
+func (m *MockWebVectorRepo) SearchTopK(ctx context.Context, query string, topK int, threshold float32) []domain.ScoredVocab {
+	return nil
+}
+func (m *MockWebVectorRepo) SearchReadTopK(ctx context.Context, query string, topK int, threshold float32) []domain.ScoredVocab {
+	return nil
+}
+func (m *MockWebVectorRepo) Count(ctx context.Context) int {
+	return len(m.items)
+}
+func (m *MockWebVectorRepo) CountRead(ctx context.Context) int {
+	read := m.GetReadVocab(ctx)
+	return len(read)
+}
+func (m *MockWebVectorRepo) MarkVocabRead(ctx context.Context, id int64, isRead bool) error {
+	if m.readMap == nil {
+		m.readMap = make(map[int64]bool)
+	}
+	m.readMap[id] = isRead
+	for i := range m.items {
+		if m.items[i].ID == id {
+			m.items[i].IsRead = isRead
+		}
+	}
+	return nil
+}
+func (m *MockWebVectorRepo) MarkDeckRead(ctx context.Context, deckName string, isRead bool) error {
+	if m.readMap == nil {
+		m.readMap = make(map[int64]bool)
+	}
+	for i := range m.items {
+		if deckName == "" || deckName == "all" || m.items[i].DeckName == deckName {
+			m.items[i].IsRead = isRead
+			m.readMap[m.items[i].ID] = isRead
+		}
+	}
+	return nil
+}
+func (m *MockWebVectorRepo) GetDecks(ctx context.Context) []domain.DeckInfo {
+	total := len(m.items)
+	read := m.CountRead(ctx)
+	pct := 0
+	if total > 0 {
+		pct = int(float64(read) / float64(total) * 100)
+	}
+	return []domain.DeckInfo{
+		{
+			ID:          1,
+			Name:        "Japanese words",
+			TotalVocab:  total,
+			ReadVocab:   read,
+			UnreadVocab: total - read,
+			Percentage:  pct,
+		},
+	}
+}
+func (m *MockWebVectorRepo) GetAllVocab(ctx context.Context) []domain.VocabItem {
+	return m.items
+}
+func (m *MockWebVectorRepo) GetVocabByDeck(ctx context.Context, deckName string) []domain.VocabItem {
+	var res []domain.VocabItem
+	for _, it := range m.items {
+		if deckName == "" || deckName == "all" || it.DeckName == deckName {
+			res = append(res, it)
+		}
+	}
+	return res
+}
+func (m *MockWebVectorRepo) GetReadVocab(ctx context.Context) []domain.VocabItem {
+	var res []domain.VocabItem
+	for _, it := range m.items {
+		if it.IsRead {
+			res = append(res, it)
+		}
+	}
+	return res
+}
+
+func setupTestServer(t *testing.T) (*Server, *MockWebTelemetryRepo) {
+	mockLLM := &MockWebLLM{}
+	mockPrompts := &MockWebPromptRepo{
+		settings: map[string]string{"support_lang": "pt"},
+		prompts:  map[string]string{"chat_system": "Prompt"},
+	}
+	mockQuizRepo := &MockWebQuizRepo{}
+	mockChatRepo := &MockWebChatRepo{}
+	mockTelemetry := &MockWebTelemetryRepo{}
+	mockGrammar := &MockWebGrammarRepo{}
+	mockVector := &MockWebVectorRepo{
+		items: []domain.VocabItem{
+			{ID: 1, DeckID: 1, DeckName: "Japanese words", Word: "日本", Reading: "にほん", Meaning: "Japão"},
+		},
+	}
+
+	quizEng := quiz.NewEngine(mockLLM, mockPrompts, mockVector, mockQuizRepo, mockGrammar)
+	chatSvc := chat.NewService(mockLLM, mockPrompts, mockVector, mockChatRepo, mockGrammar)
+
+	srv, err := NewServer(Config{
+		QuizEngine:  quizEng,
+		ChatService: chatSvc,
+		Prompts:     mockPrompts,
+		QuizRepo:    mockQuizRepo,
+		ChatRepo:    mockChatRepo,
+		Telemetry:   mockTelemetry,
+		GrammarRepo: mockGrammar,
+		VectorRepo:  mockVector,
+		Vocab:       []domain.VocabItem{{ID: 1, DeckID: 1, DeckName: "Japanese words", Word: "日本", Reading: "にほん", Meaning: "Japão"}},
+		AnkiPath:    "dummy/path",
+	})
+	if err != nil {
+		t.Fatalf("falha ao inicializar Web Server: %v", err)
+	}
+
+	return srv, mockTelemetry
+}
+
+func TestWebRoutes(t *testing.T) {
+	srv, mockTelem := setupTestServer(t)
+	handler := srv.Routes()
+
+	// 1. Root redirect to /quiz
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest("GET", "/", nil)
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusSeeOther {
+		t.Errorf("esperado status 303 no root, obtido %d", rec.Code)
+	}
+
+	// 2. Quiz Page
+	rec = httptest.NewRecorder()
+	req = httptest.NewRequest("GET", "/quiz", nil)
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Errorf("esperado status 200 no /quiz, obtido %d", rec.Code)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, `name="modes"`) || !strings.Contains(body, `type="checkbox"`) {
+		t.Errorf("página do quiz deve conter os checkboxes de categorias/modos com name=modes")
+	}
+	if !strings.Contains(body, "new-vocab-toggle-btn") {
+		t.Errorf("página do quiz deve conter o botão de alternância de novas palavras")
+	}
+	if !strings.Contains(body, "highlight-new-vocab") {
+		t.Errorf("página do quiz deve conter a classe de destaque highlight-new-vocab")
+	}
+
+	// 3. Chat Page
+	rec = httptest.NewRecorder()
+	req = httptest.NewRequest("GET", "/chat", nil)
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Errorf("esperado status 200 no /chat, obtido %d", rec.Code)
+	}
+
+	// 4. Prompts Page
+	rec = httptest.NewRecorder()
+	req = httptest.NewRequest("GET", "/prompts", nil)
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Errorf("esperado status 200 no /prompts, obtido %d", rec.Code)
+	}
+
+	// 5. Update prompt setting
+	formData := url.Values{
+		"key":   {"support_lang"},
+		"value": {"en"},
+	}
+	rec = httptest.NewRecorder()
+	req = httptest.NewRequest("POST", "/prompts/setting", strings.NewReader(formData.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Errorf("esperado status 200 no update de setting, obtido %d", rec.Code)
+	}
+
+	// 6. Telemetry Page
+	rec = httptest.NewRecorder()
+	req = httptest.NewRequest("GET", "/telemetry", nil)
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Errorf("esperado status 200 no /telemetry, obtido %d", rec.Code)
+	}
+	telemBody := rec.Body.String()
+	if !strings.Contains(telemBody, "Telemetria de Tokens &amp; Uso de LLM") && !strings.Contains(telemBody, "Telemetria") {
+		t.Errorf("página de telemetria deve conter o título ou menção de telemetria")
+	}
+	if !strings.Contains(telemBody, "1200") {
+		t.Errorf("página de telemetria deve exibir contagem de tokens (1200)")
+	}
+
+	// 7. Clear Telemetry
+	rec = httptest.NewRecorder()
+	req = httptest.NewRequest("POST", "/telemetry/clear", nil)
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusSeeOther {
+		t.Errorf("esperado status 303 no /telemetry/clear, obtido %d", rec.Code)
+	}
+	if !mockTelem.cleared {
+		t.Errorf("esperado que mockTelem.ClearUsage tenha sido chamado")
+	}
+
+	// 8. Grammar Guide Index Page (defaults to Tae Kim tab)
+	rec = httptest.NewRecorder()
+	req = httptest.NewRequest("GET", "/grammar", nil)
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Errorf("esperado status 200 no /grammar, obtido %d", rec.Code)
+	}
+	grammarBody := rec.Body.String()
+	if !strings.Contains(grammarBody, "tab=taekim") || !strings.Contains(grammarBody, "tab=quickref") || !strings.Contains(grammarBody, "tab=notes") {
+		t.Errorf("página de gramática deve conter as abas taekim, quickref e notes")
+	}
+	if !strings.Contains(grammarBody, "Tae Kim's Guide to Japanese Grammar") {
+		t.Errorf("aba do Tae Kim deve conter o título do guia")
+	}
+	if !strings.Contains(grammarBody, "Noun Particles") {
+		t.Errorf("aba do Tae Kim deve listar as lições disponíveis")
+	}
+
+	// 9. Grammar Quick Reference Tab
+	rec = httptest.NewRecorder()
+	req = httptest.NewRequest("GET", "/grammar?tab=quickref", nil)
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Errorf("esperado status 200 no /grammar?tab=quickref, obtido %d", rec.Code)
+	}
+	quickrefBody := rec.Body.String()
+	if !strings.Contains(quickrefBody, "Referência Rápida de Gramática Japonesa") {
+		t.Errorf("aba de referência rápida deve conter o título esperado")
+	}
+	if !strings.Contains(quickrefBody, "Partículas Mais Utilizadas") {
+		t.Errorf("aba de referência rápida deve conter a tabela de partículas")
+	}
+
+	// 10. Grammar Notes Tab
+	rec = httptest.NewRecorder()
+	req = httptest.NewRequest("GET", "/grammar?tab=notes", nil)
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Errorf("esperado status 200 no /grammar?tab=notes, obtido %d", rec.Code)
+	}
+	notesBody := rec.Body.String()
+	if !strings.Contains(notesBody, "Anotações Locais") {
+		t.Errorf("aba de notas deve conter o título de anotações locais")
+	}
+
+	// 11. Grammar Lesson Reader Page
+	rec = httptest.NewRecorder()
+	req = httptest.NewRequest("GET", "/grammar/lesson?id=basics/noun-particles", nil)
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Errorf("esperado status 200 no /grammar/lesson, obtido %d", rec.Code)
+	}
+	lessonBody := rec.Body.String()
+	if !strings.Contains(lessonBody, "Noun Particles") {
+		t.Errorf("leitor de lição deve conter o título da lição")
+	}
+	if !strings.Contains(lessonBody, "guidetojapanese.org") {
+		t.Errorf("leitor de lição deve conter link para a fonte oficial")
+	}
+
+	// 12. Grammar Lesson Toggle Read Endpoint
+	rec = httptest.NewRecorder()
+	req = httptest.NewRequest("POST", "/grammar/lesson/toggle-read?id=basics/noun-particles", nil)
+	req.Header.Set("HX-Request", "true")
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Errorf("esperado status 200 no /grammar/lesson/toggle-read, obtido %d", rec.Code)
+	}
+	toggleBody := rec.Body.String()
+	if !strings.Contains(toggleBody, "Lido") {
+		t.Errorf("resposta do toggle deve indicar status lido, obtido: %s", toggleBody)
+	}
+
+	// 13. Grammar Filter by Read
+	rec = httptest.NewRecorder()
+	req = httptest.NewRequest("GET", "/grammar?tab=taekim&filter=read", nil)
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Errorf("esperado status 200 no /grammar?filter=read, obtido %d", rec.Code)
+	}
+	filterReadBody := rec.Body.String()
+	if !strings.Contains(filterReadBody, "Noun Particles") {
+		t.Errorf("lição lida deve aparecer no filtro read")
+	}
+
+	// 14. Grammar Filter by Unread (should NOT contain the read lesson)
+	rec = httptest.NewRecorder()
+	req = httptest.NewRequest("GET", "/grammar?tab=taekim&filter=unread", nil)
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Errorf("esperado status 200 no /grammar?filter=unread, obtido %d", rec.Code)
+	}
+	filterUnreadBody := rec.Body.String()
+	if strings.Contains(filterUnreadBody, "Noun Particles") {
+		t.Errorf("lição lida NÃO deve aparecer no filtro unread")
+	}
+
+	// 15. Decks Page
+	rec = httptest.NewRecorder()
+	req = httptest.NewRequest("GET", "/decks", nil)
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Errorf("esperado status 200 no /decks, obtido %d", rec.Code)
+	}
+	decksBody := rec.Body.String()
+	if !strings.Contains(decksBody, "Decks do Anki") || !strings.Contains(decksBody, "Japanese words") {
+		t.Errorf("página de decks deve listar decks e títulos")
+	}
+
+	// 16. Toggle Vocab Read Endpoint
+	rec = httptest.NewRecorder()
+	req = httptest.NewRequest("POST", "/vocab/toggle-read?id=1", nil)
+	req.Header.Set("HX-Request", "true")
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Errorf("esperado status 200 no /vocab/toggle-read, obtido %d", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), "Lido") {
+		t.Errorf("resposta deve indicar status lido, obtido %s", rec.Body.String())
+	}
+
+	// 17. Decks Filter by Read
+	rec = httptest.NewRecorder()
+	req = httptest.NewRequest("GET", "/decks?filter=read", nil)
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Errorf("esperado status 200 no /decks?filter=read, obtido %d", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), "日本") {
+		t.Errorf("palavra lida deve aparecer no filtro read")
+	}
+
+	// 18. Toggle Entire Deck Unread
+	rec = httptest.NewRecorder()
+	req = httptest.NewRequest("POST", "/decks/toggle-read?deck=Japanese+words&read=0", nil)
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusSeeOther {
+		t.Errorf("esperado status 303 no /decks/toggle-read, obtido %d", rec.Code)
+	}
+
+	// 19. Verify Deck Filter Read is now empty
+	rec = httptest.NewRecorder()
+	req = httptest.NewRequest("GET", "/decks?filter=read", nil)
+	handler.ServeHTTP(rec, req)
+	if strings.Contains(rec.Body.String(), "日本") {
+		t.Errorf("palavra desmarcada NÃO deve aparecer no filtro read")
+	}
+}
+
+

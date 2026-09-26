@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AnkiWrapper</title>
+    <script src="https://unpkg.com/htmx.org@1.9.12"></script>
+    <style>
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            background: #ffffff;
+            color: #111111;
+            margin: 1rem auto;
+            max-width: 800px;
+            padding: 0 1rem;
+            line-height: 1.4;
+        }
+        header {
+            margin-bottom: 1rem;
+        }
+        nav {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.95rem;
+            flex-wrap: wrap;
+        }
+        nav a {
+            color: #0055aa;
+            text-decoration: none;
+        }
+        nav a.active {
+            font-weight: bold;
+            text-decoration: underline;
+        }
+        .nav-right {
+            margin-left: auto;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            font-size: 0.85rem;
+        }
+        input, select, textarea, button {
+            font-family: inherit;
+            font-size: 0.95rem;
+        }
+        .japanese-text {
+            font-size: 1.25rem;
+            line-height: 1.8;
+        }
+        ruby.furigana-ruby {
+            cursor: pointer;
+        }
+        body.furigana-hover-mode ruby.furigana-ruby rt {
+            visibility: hidden;
+        }
+        body.furigana-hover-mode ruby.furigana-ruby:hover rt,
+        body.furigana-hover-mode ruby.furigana-ruby:active rt {
+            visibility: visible;
+            color: #0055aa;
+        }
+        body.furigana-always-mode ruby.furigana-ruby rt {
+            visibility: visible;
+            color: #666666;
+        }
+        /* Highlighting of words not in Anki database */
+        body.highlight-new-vocab .vocab-new,
+        body.highlight-new-vocab ruby.vocab-new {
+            color: #1a66cc;
+        }
+        body.highlight-new-vocab ruby.vocab-new rt {
+            color: #2b7fff;
+        }
+        rt { font-size: 0.6em; }
+        .htmx-indicator { display: none; }
+        .htmx-request .htmx-indicator,
+        .htmx-request.htmx-indicator { display: inline; }
+        table { border-collapse: collapse; }
+        th, td { border: 1px solid #ccc; padding: 4px 8px; text-align: left; }
+    </style>
+</head>
+<body class="furigana-hover-mode highlight-new-vocab" id="app-body">
+    <header>
+        <nav>
+            <strong>AnkiWrapper</strong>
+            <span>|</span>
+            <a href="/quiz" class="{{if eq .ActiveNav "quiz"}}active{{end}}">Quizzes</a>
+            <span>|</span>
+            <a href="/chat" class="{{if eq .ActiveNav "chat"}}active{{end}}">Conversa</a>
+            <span>|</span>
+            <a href="/grammar" class="{{if eq .ActiveNav "grammar"}}active{{end}}">Gramática</a>
+            <span>|</span>
+            <a href="/decks" class="{{if eq .ActiveNav "decks"}}active{{end}}">Decks</a>
+            <span>|</span>
+            <a href="/prompts" class="{{if eq .ActiveNav "prompts"}}active{{end}}">Prompts</a>
+            <span>|</span>
+            <a href="/telemetry" class="{{if eq .ActiveNav "telemetry"}}active{{end}}">Telemetria</a>
+
+            <div class="nav-right">
+                <button type="button" onclick="toggleFuriganaMode()" id="furigana-toggle-btn">
+                    Furigana: <span id="furigana-mode-text">Hover</span>
+                </button>
+                <button type="button" onclick="toggleNewVocabMode()" id="new-vocab-toggle-btn" title="Alternar destaque em azul para palavras fora do Anki">
+                    Novos Termos: <span id="new-vocab-mode-text">Azul</span>
+                </button>
+                <a href="/decks" style="color: inherit; text-decoration: none;"><span>{{.VocabCount}} palavras</span></a>
+            </div>
+        </nav>
+        <hr style="margin-top: 0.5rem; border: 0; border-top: 1px solid #ccc;">
+    </header>
+
+    <main>
+        {{if eq .ActiveNav "quiz"}}
+            {{template "quiz_content" .}}
+        {{else if eq .ActiveNav "chat"}}
+            {{template "chat_content" .}}
+        {{else if eq .ActiveNav "grammar"}}
+            {{if .IsLesson}}
+                {{template "grammar_lesson_content" .}}
+            {{else}}
+                {{template "grammar_content" .}}
+            {{end}}
+        {{else if eq .ActiveNav "decks"}}
+            {{template "decks_content" .}}
+        {{else if eq .ActiveNav "prompts"}}
+            {{template "prompts_content" .}}
+        {{else if eq .ActiveNav "telemetry"}}
+            {{template "telemetry_content" .}}
+        {{end}}
+    </main>
+
+    <script>
+        function initFurigana() {
+            const saved = localStorage.getItem('furigana_mode') || 'hover';
+            applyFuriganaMode(saved);
+        }
+
+        function toggleFuriganaMode() {
+            const current = document.body.classList.contains('furigana-always-mode') ? 'always' : 'hover';
+            const next = current === 'hover' ? 'always' : 'hover';
+            localStorage.setItem('furigana_mode', next);
+            applyFuriganaMode(next);
+        }
+
+        function applyFuriganaMode(mode) {
+            const body = document.getElementById('app-body');
+            const label = document.getElementById('furigana-mode-text');
+            if (mode === 'always') {
+                body.classList.remove('furigana-hover-mode');
+                body.classList.add('furigana-always-mode');
+                if (label) label.innerText = 'Sempre';
+            } else {
+                body.classList.remove('furigana-always-mode');
+                body.classList.add('furigana-hover-mode');
+                if (label) label.innerText = 'Hover';
+            }
+        }
+
+        function initNewVocab() {
+            const saved = localStorage.getItem('vocab_highlight_mode') || 'active';
+            applyNewVocabMode(saved);
+        }
+
+        function toggleNewVocabMode() {
+            const isCurrentlyActive = document.body.classList.contains('highlight-new-vocab');
+            const next = isCurrentlyActive ? 'inactive' : 'active';
+            localStorage.setItem('vocab_highlight_mode', next);
+            applyNewVocabMode(next);
+        }
+
+        function applyNewVocabMode(mode) {
+            const body = document.getElementById('app-body');
+            const label = document.getElementById('new-vocab-mode-text');
+            if (mode === 'active') {
+                body.classList.add('highlight-new-vocab');
+                if (label) label.innerText = 'Azul';
+            } else {
+                body.classList.remove('highlight-new-vocab');
+                if (label) label.innerText = 'Normal';
+            }
+        }
+
+        initFurigana();
+        initNewVocab();
+    </script>
+</body>
+</html>

@@ -1,0 +1,24 @@
+services:
+  anki-wrapper:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: anki-wrapper
+    ports:
+      - "${PORT:-8080}:8080"
+    environment:
+      - PORT=8080
+      - LLM_PROVIDER=${LLM_PROVIDER:-gemini}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - GEMINI_MODEL=${GEMINI_MODEL:-gemini-3.5-flash-lite}
+      - DB_PATH=/app/data/app.db
+      - ANKI_PATH=/app/anki/collection.anki2
+    volumes:
+      # Persists app database (quiz history, telemetry, vector embeddings)
+      - ./data:/app/data
+      # Mount your local Anki collection.anki2 in read-only mode.
+      # Define ANKI_COLLECTION_PATH in your .env or adjust path below:
+      # Flatpak (padrão): ~/.var/app/net.ankiweb.Anki/data/Anki2/User 1/collection.anki2
+      # Linux Nativo: ~/.local/share/Anki2/User 1/collection.anki2
+      - ${ANKI_COLLECTION_PATH:-/home/arrtuh/.var/app/net.ankiweb.Anki/data/Anki2/User 1/collection.anki2}:/app/anki/collection.anki2:ro
+    restart: unless-stopped

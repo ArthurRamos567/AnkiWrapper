@@ -1,0 +1,56 @@
+{{define "grammar_lesson_content"}}
+<article style="max-width: 760px; margin: 0 auto;">
+    <!-- Breadcrumb & Top Controls -->
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.5rem;">
+        <a href="/grammar?tab=taekim" style="color: #0055aa; text-decoration: none; font-size: 0.9rem;">
+            &larr; Voltar para Gramática (Guia Tae Kim)
+        </a>
+        <div style="display: flex; gap: 0.5rem; align-items: center;">
+            {{if .Lesson.IsRead}}
+            <button type="button" hx-post="/grammar/lesson/toggle-read?id={{.Lesson.ID}}&format=button" hx-target="this" hx-swap="outerHTML" style="cursor: pointer; padding: 4px 10px; background: #eafbe8; color: #006600; border: 1px solid #008800; border-radius: 3px; font-size: 0.85rem; font-weight: bold;" title="Clique para desmarcar">✓ Lido (Concluído)</button>
+            {{else}}
+            <button type="button" hx-post="/grammar/lesson/toggle-read?id={{.Lesson.ID}}&format=button" hx-target="this" hx-swap="outerHTML" style="cursor: pointer; padding: 4px 10px; background: #f8f9fa; color: #444; border: 1px solid #ccc; border-radius: 3px; font-size: 0.85rem;" title="Clique para marcar como lido">○ Marcar como Lido</button>
+            {{end}}
+            <a href="/quiz?topic=Tae+Kim+{{.Lesson.SectionKey}}+{{.Lesson.Title}}" style="display: inline-block; padding: 4px 10px; background: #0055aa; color: #fff; text-decoration: none; border-radius: 3px; font-size: 0.85rem;">
+                Praticar no Quiz 🎯
+            </a>
+        </div>
+    </div>
+
+    <!-- Lesson Header -->
+    <header style="border-bottom: 2px solid #111; padding-bottom: 0.75rem; margin-bottom: 1.5rem;">
+        <div style="font-size: 0.85rem; color: #666; margin-bottom: 0.25rem;">
+            Capítulo {{.Lesson.ChapterNumber}}: {{.Lesson.Chapter}} &bull; Seção {{.Lesson.SectionKey}}
+        </div>
+        <h1 style="margin: 0 0 0.5rem 0; font-size: 1.6rem;">{{.Lesson.Title}}</h1>
+
+        <!-- Authoritative Links -->
+        <div style="font-size: 0.85rem; background: #f8f9fa; border: 1px solid #ddd; padding: 0.5rem 0.75rem; border-radius: 3px; display: flex; gap: 1rem; flex-wrap: wrap;">
+            <span>📖 <strong>Fonte Oficial:</strong> <a href="{{.Lesson.URL}}" target="_blank" rel="noopener noreferrer" style="color: #0055aa;">guidetojapanese.org ↗</a></span>
+            <span>🌐 <strong>Espelho Web:</strong> <a href="{{.Lesson.WebURL}}" target="_blank" rel="noopener noreferrer" style="color: #0055aa;">jp.saeris.gg ↗</a></span>
+        </div>
+    </header>
+
+    <!-- Rendered Lesson Body -->
+    <div class="japanese-text" style="font-size: 1rem; line-height: 1.7;">
+        {{raw .ContentHTML}}
+    </div>
+
+    <!-- Bottom Footer Navigation -->
+    <footer style="margin-top: 3rem; padding-top: 1rem; border-top: 1px solid #ccc; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem;">
+        <a href="/grammar?tab=taekim" style="color: #0055aa; text-decoration: none; font-size: 0.9rem;">
+            &larr; Voltar para Gramática (Guia Tae Kim)
+        </a>
+        <div style="display: flex; gap: 0.5rem; align-items: center;">
+            {{if .Lesson.IsRead}}
+            <button type="button" hx-post="/grammar/lesson/toggle-read?id={{.Lesson.ID}}&format=button" hx-target="this" hx-swap="outerHTML" style="cursor: pointer; padding: 6px 12px; background: #eafbe8; color: #006600; border: 1px solid #008800; border-radius: 3px; font-size: 0.9rem; font-weight: bold;" title="Clique para desmarcar">✓ Lido (Concluído)</button>
+            {{else}}
+            <button type="button" hx-post="/grammar/lesson/toggle-read?id={{.Lesson.ID}}&format=button" hx-target="this" hx-swap="outerHTML" style="cursor: pointer; padding: 6px 12px; background: #f8f9fa; color: #444; border: 1px solid #ccc; border-radius: 3px; font-size: 0.9rem;" title="Clique para marcar como lido">○ Marcar como Lido</button>
+            {{end}}
+            <a href="/quiz?topic=Tae+Kim+{{.Lesson.SectionKey}}+{{.Lesson.Title}}" style="display: inline-block; padding: 6px 12px; background: #0055aa; color: #fff; text-decoration: none; border-radius: 3px; font-size: 0.9rem;">
+                Gerar Quiz sobre {{.Lesson.Title}} 🎯
+            </a>
+        </div>
+    </footer>
+</article>
+{{end}}

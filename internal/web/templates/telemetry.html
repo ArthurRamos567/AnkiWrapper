@@ -1,0 +1,121 @@
+{{define "telemetry_content"}}
+<div>
+    <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 0.5rem;">
+        <strong style="font-size: 1.1rem;">Telemetria de Tokens & Uso de LLM</strong>
+        <form hx-post="/telemetry/clear" hx-target="body" style="display: inline;">
+            <button type="submit" style="font-size: 0.8rem;" onclick="return confirm('Deseja realmente limpar os registros de telemetria?')">Limpar Histórico</button>
+        </form>
+    </div>
+
+    <!-- Summary Box -->
+    <p style="margin: 0.5rem 0 1.25rem 0; font-size: 0.9rem; color: #333;">
+        Total de Chamadas: <strong>{{.Stats.TotalCalls}}</strong> |
+        Prompt: <strong>{{.Stats.TotalPromptTokens}}</strong> |
+        Output: <strong>{{.Stats.TotalOutputTokens}}</strong> |
+        Thinking: <strong>{{.Stats.TotalThinkingTokens}}</strong> |
+        Cache: <strong>{{.Stats.TotalCachedTokens}}</strong> |
+        Total Tokens: <strong style="color: #0055aa;">{{.Stats.TotalTokens}}</strong> |
+        Latência Média: <strong>{{.Stats.AvgDurationMs}} ms</strong>
+    </p>
+
+    <!-- Usage by Operation & Provider -->
+    <div style="display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 1.5rem;">
+        <!-- By Operation -->
+        <div style="flex: 1; min-width: 280px;">
+            <p style="font-weight: bold; margin-bottom: 0.35rem; font-size: 0.85rem;">Consumo por Operação</p>
+            <table style="width: 100%; font-size: 0.85rem;">
+                <thead>
+                    <tr style="background: #f4f4f4;">
+                        <th>Operação</th>
+                        <th>Chamadas</th>
+                        <th>Total Tokens</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {{range $op, $calls := .Stats.CallsByOperation}}
+                    <tr>
+                        <td><code>{{$op}}</code></td>
+                        <td>{{$calls}}</td>
+                        <td><strong>{{index $.Stats.TokensByOperation $op}}</strong></td>
+                    </tr>
+                    {{else}}
+                    <tr>
+                        <td colspan="3" style="color: #777; text-align: center;">Nenhuma chamada registrada</td>
+                    </tr>
+                    {{end}}
+                </tbody>
+            </table>
+        </div>
+
+        <!-- By Provider -->
+        <div style="width: 240px;">
+            <p style="font-weight: bold; margin-bottom: 0.35rem; font-size: 0.85rem;">Chamadas por Provedor</p>
+            <table style="width: 100%; font-size: 0.85rem;">
+                <thead>
+                    <tr style="background: #f4f4f4;">
+                        <th>Provedor</th>
+                        <th>Chamadas</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {{range $prov, $calls := .Stats.CallsByProvider}}
+                    <tr>
+                        <td><code>{{$prov}}</code></td>
+                        <td><strong>{{$calls}}</strong></td>
+                    </tr>
+                    {{else}}
+                    <tr>
+                        <td colspan="2" style="color: #777; text-align: center;">Nenhum provedor</td>
+                    </tr>
+                    {{end}}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Recent Logs Table -->
+    <div>
+        <p style="font-weight: bold; margin-bottom: 0.35rem; font-size: 0.85rem;">Últimas Requisições ({{len .RecentUsage}})</p>
+        <table style="width: 100%; font-size: 0.8rem;">
+            <thead>
+                <tr style="background: #f4f4f4;">
+                    <th>Data/Hora</th>
+                    <th>Operação</th>
+                    <th>Provedor/Modelo</th>
+                    <th>Prompt</th>
+                    <th>Output</th>
+                    <th>Thinking</th>
+                    <th>Total</th>
+                    <th>Latência</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                {{range .RecentUsage}}
+                <tr>
+                    <td style="color: #666; font-family: monospace;">{{.CreatedAt.Format "15:04:05"}}</td>
+                    <td><code>{{.Operation}}</code></td>
+                    <td>{{.Provider}} <small style="color: #777;">({{.Model}})</small></td>
+                    <td>{{.PromptTokens}}</td>
+                    <td>{{.OutputTokens}}</td>
+                    <td>{{.ThinkingTokens}}</td>
+                    <td><strong>{{.TotalTokens}}</strong></td>
+                    <td style="font-family: monospace;">{{.DurationMs}} ms</td>
+                    <td>
+                        {{if eq .Status "SUCCESS"}}
+                            <span style="color: #007700;">OK</span>
+                        {{else}}
+                            <span style="color: #c00;" title="{{.ErrorMsg}}">ERRO</span>
+                        {{end}}
+                    </td>
+                </tr>
+                {{else}}
+                <tr>
+                    <td colspan="9" style="text-align: center; color: #777; padding: 1rem;">Nenhum registro de telemetria disponível.</td>
+                </tr>
+                {{end}}
+            </tbody>
+        </table>
+    </div>
+</div>
+{{end}}

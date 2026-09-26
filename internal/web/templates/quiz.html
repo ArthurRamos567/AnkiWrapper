@@ -1,0 +1,270 @@
+{{define "quiz_content"}}
+<div>
+    <!-- Top Stats (sem streak) -->
+    {{if .Stats}}
+    <p style="margin: 0 0 1rem 0; font-size: 0.9rem; color: #444;">
+        Respondidas: <strong>{{.Stats.Total}}</strong> |
+        Acertos: <strong>{{.Stats.Correct}}</strong> |
+        Erros: <strong>{{.Stats.Incorrect}}</strong> |
+        Aproveitamento: <strong>{{printf "%.1f" .Stats.Accuracy}}%</strong>
+    </p>
+    {{end}}
+
+    <!-- Generator Form com checkboxes para as categorias de quiz -->
+    <form hx-post="/quiz/generate" hx-target="#quiz-container" hx-indicator="#loading-spinner, #quiz-skeleton" style="margin-bottom: 1rem;">
+        <div style="display: flex; flex-direction: column; gap: 0.6rem;">
+            <!-- Checkboxes de Categorias de Quizes -->
+            <div style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; background: #fafafa; padding: 0.4rem 0.6rem; border: 1px solid #ddd; border-radius: 4px;">
+                <span style="font-size: 0.85rem; font-weight: bold; color: #444;">Categorias:</span>
+                <label style="display: inline-flex; align-items: center; gap: 0.35rem; cursor: pointer; font-size: 0.85rem; user-select: none;">
+                    <input type="checkbox" name="modes" value="multiple_choice" checked>
+                    Múltipla Escolha
+                </label>
+                <label style="display: inline-flex; align-items: center; gap: 0.35rem; cursor: pointer; font-size: 0.85rem; user-select: none;">
+                    <input type="checkbox" name="modes" value="cloze" checked>
+                    Cloze (Lacunas)
+                </label>
+                <label style="display: inline-flex; align-items: center; gap: 0.35rem; cursor: pointer; font-size: 0.85rem; user-select: none;">
+                    <input type="checkbox" name="modes" value="free" checked>
+                    Composição Livre
+                </label>
+            </div>
+
+            <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+                <label for="topic-input" style="font-size: 0.85rem; color: #555;">Tópico:</label>
+                <input type="text" name="topic" id="topic-input" value="{{.SelectedTopic}}" placeholder="Ex: Gramática Geral, Verbos..." style="width: 260px; padding: 3px 6px;">
+                <button type="submit">Gerar</button>
+                <span id="loading-spinner" class="htmx-indicator">Gerando...</span>
+            </div>
+        </div>
+    </form>
+
+    <div id="quiz-container">
+        <div id="quiz-skeleton" class="htmx-indicator" style="padding: 1rem; color: #666;">
+            <em>Gerando questão com vocabulário do Anki...</em>
+        </div>
+
+        {{if .ActiveQuestion}}
+            {{template "question_card" .ActiveQuestion}}
+        {{end}}
+    </div>
+
+    <!-- History -->
+    {{if .RecentQuizzes}}
+    <div style="margin-top: 2rem;">
+        <p style="font-weight: bold; margin-bottom: 0.5rem; font-size: 0.9rem;">Histórico Recente</p>
+        <table style="width: 100%; font-size: 0.85rem;">
+            <thead>
+                <tr style="background: #f4f4f4;">
+                    <th>Status</th>
+                    <th>Modo</th>
+                    <th>Tópico</th>
+                    <th>Questão</th>
+                    <th>Hora</th>
+                </tr>
+            </thead>
+            <tbody>
+                {{range .RecentQuizzes}}
+                <tr>
+                    <td>{{if .IsCorrect}}Acerto{{else}}Erro{{end}}</td>
+                    <td>{{.Mode}}</td>
+                    <td>{{.Topic}}</td>
+                    <td>{{.Question}}</td>
+                    <td style="color: #666; font-family: monospace;">{{.CreatedAt.Format "15:04:05"}}</td>
+                </tr>
+                {{end}}
+            </tbody>
+        </table>
+    </div>
+    {{end}}
+</div>
+
+<script>
+function initQuizModes() {
+    const saved = localStorage.getItem('quiz_selected_modes');
+    if (saved) {
+        try {
+            const modes = JSON.parse(saved);
+            const checkboxes = document.querySelectorAll('input[name="modes"]');
+            if (Array.isArray(modes) && modes.length > 0) {
+                checkboxes.forEach(cb => {
+                    cb.checked = modes.includes(cb.value);
+                });
+            }
+        } catch (e) {}
+    }
+    document.querySelectorAll('input[name="modes"]').forEach(cb => {
+        cb.addEventListener('change', () => {
+            const checked = Array.from(document.querySelectorAll('input[name="modes"]:checked')).map(c => c.value);
+            localStorage.setItem('quiz_selected_modes', JSON.stringify(checked));
+        });
+    });
+}
+initQuizModes();
+
+document.addEventListener('keydown', function(e) {
+    if (['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName)) {
+        return;
+    }
+
+    if (['1', '2', '3', '4'].includes(e.key)) {
+        const idx = parseInt(e.key) - 1;
+        const buttons = document.querySelectorAll('#options-grid button');
+        if (buttons && buttons[idx]) {
+            buttons[idx].click();
+        }
+    }
+
+    if (e.code === 'Space') {
+        const nextBtn = document.getElementById('next-question-btn');
+        if (nextBtn) {
+            e.preventDefault();
+            nextBtn.click();
+        }
+    }
+});
+</script>
+{{end}}
+
+{{define "question_card"}}
+<div style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid #ccc;">
+    <p style="margin: 0 0 0.5rem 0;">
+        <strong>{{.PromptText}}</strong>
+        <span style="font-size: 0.8rem; color: #666; margin-left: 0.5rem;">[{{.Mode}} | {{.Topic}}]</span>
+    </p>
+
+    {{if .SentenceHTML}}
+    <div class="japanese-text" style="margin: 0.75rem 0; padding: 0.5rem; background: #fafafa; border-left: 3px solid #0055aa;">
+        {{raw .SentenceHTML}}
+    </div>
+    {{end}}
+
+    {{if .GrammarRef}}
+    <div style="margin: 0.5rem 0; padding: 0.35rem 0.6rem; background: #f0f4f8; border-left: 3px solid #0055aa; font-size: 0.85rem;">
+        📖 <strong>Regra:</strong> {{.GrammarRef.Title}} (Tae Kim {{.GrammarRef.SectionKey}}) — 
+        <a href="{{.GrammarRef.URL}}" target="_blank" rel="noopener noreferrer" style="color: #0055aa;">Fonte Oficial ↗</a> | 
+        <a href="{{.GrammarRef.LocalURL}}" target="_blank" style="color: #0055aa;">Ler no Guia</a>
+    </div>
+    {{end}}
+
+    {{if .Hint}}
+    <details style="margin: 0.5rem 0; font-size: 0.85rem; color: #666;">
+        <summary style="cursor: pointer;">Dica</summary>
+        <p style="margin: 0.25rem 0 0 0.5rem; color: #333;">{{.Hint}}</p>
+    </details>
+    {{end}}
+
+    <div id="answer-container" style="margin-top: 0.75rem;">
+        {{if eq .Mode "multiple_choice"}}
+            <ol id="options-grid" style="padding-left: 1.25rem; margin: 0;">
+                {{range $idx, $opt := .Options}}
+                <li style="margin-bottom: 0.35rem;">
+                    <form hx-post="/quiz/answer" hx-target="#answer-container" hx-indicator="#ans-spinner">
+                        <input type="hidden" name="question_id" value="{{$.ID}}">
+                        <input type="hidden" name="mode" value="{{$.Mode}}">
+                        <input type="hidden" name="topic" value="{{$.Topic}}">
+                        <input type="hidden" name="prompt_text" value="{{$.PromptText}}">
+                        <input type="hidden" name="correct_answer" value="{{$.CorrectAnswer}}">
+                        <input type="hidden" name="explanation" value="{{$.Explanation}}">
+                        <input type="hidden" name="user_answer" value="{{$opt}}">
+                        {{if $.GrammarRef}}
+                        <input type="hidden" name="grammar_id" value="{{$.GrammarRef.ID}}">
+                        <input type="hidden" name="grammar_title" value="{{$.GrammarRef.Title}}">
+                        <input type="hidden" name="grammar_section_key" value="{{$.GrammarRef.SectionKey}}">
+                        <input type="hidden" name="grammar_chapter" value="{{$.GrammarRef.Chapter}}">
+                        <input type="hidden" name="grammar_url" value="{{$.GrammarRef.URL}}">
+                        <input type="hidden" name="grammar_web_url" value="{{$.GrammarRef.WebURL}}">
+                        {{end}}
+                        <button type="submit" style="padding: 4px 8px;">
+                            {{$opt}}
+                        </button>
+                    </form>
+                </li>
+                {{end}}
+            </ol>
+        {{else if eq .Mode "cloze"}}
+            <form hx-post="/quiz/answer" hx-target="#answer-container" hx-indicator="#ans-spinner">
+                <input type="hidden" name="question_id" value="{{.ID}}">
+                <input type="hidden" name="mode" value="{{.Mode}}">
+                <input type="hidden" name="topic" value="{{.Topic}}">
+                <input type="hidden" name="prompt_text" value="{{.PromptText}}">
+                <input type="hidden" name="correct_answer" value="{{.CorrectAnswer}}">
+                <input type="hidden" name="explanation" value="{{.Explanation}}">
+                {{if .GrammarRef}}
+                <input type="hidden" name="grammar_id" value="{{.GrammarRef.ID}}">
+                <input type="hidden" name="grammar_title" value="{{.GrammarRef.Title}}">
+                <input type="hidden" name="grammar_section_key" value="{{.GrammarRef.SectionKey}}">
+                <input type="hidden" name="grammar_chapter" value="{{.GrammarRef.Chapter}}">
+                <input type="hidden" name="grammar_url" value="{{.GrammarRef.URL}}">
+                <input type="hidden" name="grammar_web_url" value="{{.GrammarRef.WebURL}}">
+                {{end}}
+                <input type="text" name="user_answer" autofocus style="width: 200px;">
+                <button type="submit">Responder [Enter]</button>
+                <span id="ans-spinner" class="htmx-indicator">...</span>
+            </form>
+        {{else if eq .Mode "free"}}
+            <form hx-post="/quiz/answer" hx-target="#answer-container" hx-indicator="#ans-spinner">
+                <input type="hidden" name="question_id" value="{{.ID}}">
+                <input type="hidden" name="mode" value="{{.Mode}}">
+                <input type="hidden" name="topic" value="{{.Topic}}">
+                <input type="hidden" name="prompt_text" value="{{.PromptText}}">
+                <input type="hidden" name="reference_answer" value="{{.ReferenceAnswer}}">
+                <input type="hidden" name="explanation" value="{{.Explanation}}">
+                {{if .GrammarRef}}
+                <input type="hidden" name="grammar_id" value="{{.GrammarRef.ID}}">
+                <input type="hidden" name="grammar_title" value="{{.GrammarRef.Title}}">
+                <input type="hidden" name="grammar_section_key" value="{{.GrammarRef.SectionKey}}">
+                <input type="hidden" name="grammar_chapter" value="{{.GrammarRef.Chapter}}">
+                <input type="hidden" name="grammar_url" value="{{.GrammarRef.URL}}">
+                <input type="hidden" name="grammar_web_url" value="{{.GrammarRef.WebURL}}">
+                {{end}}
+                <textarea name="user_answer" rows="3" autofocus style="width: 100%;"></textarea><br>
+                <button type="submit" style="margin-top: 0.25rem;">Avaliar</button>
+                <span id="ans-spinner" class="htmx-indicator">Avaliando...</span>
+            </form>
+        {{end}}
+    </div>
+</div>
+{{end}}
+
+{{define "answer_result"}}
+<div style="margin-top: 0.75rem; padding: 0.5rem; border: 1px solid #ccc; background: #fafafa;">
+    <p style="margin: 0 0 0.5rem 0;">
+        <strong>{{if .IsCorrect}}Correto{{else}}Incorreto{{end}}</strong>
+        {{if gt .Score 0}} ({{.Score}}/100){{end}}
+    </p>
+
+    <p style="margin: 0.25rem 0; font-size: 0.9rem;">
+        Sua resposta: <code>{{.UserAnswer}}</code>
+    </p>
+
+    <div style="margin: 0.5rem 0;">
+        <span style="font-size: 0.85rem; color: #666;">Gabarito:</span>
+        <div class="japanese-text">{{raw .CorrectAnswerHTML}}</div>
+    </div>
+
+    <p style="margin: 0.25rem 0; font-size: 0.9rem;">
+        <strong>Explicação:</strong> {{.Explanation}}
+    </p>
+
+    {{if .Feedback}}
+    <p style="margin: 0.25rem 0; font-size: 0.85rem; color: #555;">
+        <strong>Feedback:</strong> {{.Feedback}}
+    </p>
+    {{end}}
+
+    {{if .GrammarRef}}
+    <div style="margin: 0.5rem 0; padding: 0.4rem 0.6rem; background: #f0f4f8; border-left: 3px solid #0055aa; font-size: 0.85rem;">
+        📖 <strong>Regra de Referência:</strong> {{.GrammarRef.Title}} (Tae Kim {{.GrammarRef.SectionKey}}) — 
+        <a href="{{.GrammarRef.URL}}" target="_blank" rel="noopener noreferrer" style="color: #0055aa; font-weight: 500;">Fonte Oficial (guidetojapanese.org) ↗</a> | 
+        <a href="{{.GrammarRef.LocalURL}}" target="_blank" style="color: #0055aa;">Ler Explicação no Guia</a>
+    </div>
+    {{end}}
+
+    <p style="margin-top: 0.75rem; margin-bottom: 0;">
+        <button id="next-question-btn" onclick="document.querySelector('form[hx-post=\'/quiz/generate\'] button[type=\'submit\']').click()">
+            Próxima Questão [Espaço]
+        </button>
+    </p>
+</div>
+{{end}}

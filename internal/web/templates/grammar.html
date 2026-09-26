@@ -1,0 +1,334 @@
+{{define "grammar_content"}}
+<div>
+    <!-- Section Header & Tab Navigation -->
+    <div style="margin-bottom: 1.25rem;">
+        <h2 style="margin: 0 0 0.5rem 0; font-size: 1.3rem;">Gramática</h2>
+        <div style="display: flex; gap: 0.5rem; border-bottom: 1px solid #ccc; padding-bottom: 0.4rem; font-size: 0.9rem; align-items: center;">
+            <a href="/grammar?tab=taekim" style="text-decoration: none; {{if eq .CurrentTab "taekim"}}font-weight: bold; color: #111; border-bottom: 2px solid #0055aa; padding-bottom: 0.4rem;{{else}}color: #0055aa;{{end}}">
+                Guia Tae Kim ({{.TotalLessons}})
+            </a>
+            <span style="color: #999;">|</span>
+            <a href="/grammar?tab=quickref" style="text-decoration: none; {{if eq .CurrentTab "quickref"}}font-weight: bold; color: #111; border-bottom: 2px solid #0055aa; padding-bottom: 0.4rem;{{else}}color: #0055aa;{{end}}">
+                Referência Rápida
+            </a>
+            <span style="color: #999;">|</span>
+            <a href="/grammar?tab=notes" style="text-decoration: none; {{if eq .CurrentTab "notes"}}font-weight: bold; color: #111; border-bottom: 2px solid #0055aa; padding-bottom: 0.4rem;{{else}}color: #0055aa;{{end}}">
+                Minhas Anotações
+            </a>
+        </div>
+    </div>
+
+    {{if eq .CurrentTab "taekim"}}
+        {{template "grammar_tab_taekim" .}}
+    {{else if eq .CurrentTab "quickref"}}
+        {{template "grammar_tab_quickref" .}}
+    {{else if eq .CurrentTab "notes"}}
+        {{template "grammar_tab_notes" .}}
+    {{end}}
+</div>
+{{end}}
+
+{{define "grammar_tab_taekim"}}
+<div>
+    <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 0.75rem; flex-wrap: wrap; gap: 0.5rem;">
+        <div>
+            <h3 style="margin: 0 0 0.25rem 0; font-size: 1.15rem;">Tae Kim's Guide to Japanese Grammar</h3>
+            <p style="margin: 0; font-size: 0.85rem; color: #666;">
+                {{.TotalLessons}} lições indexadas &bull; <strong>{{.ReadCount}}</strong> lidas ({{.ReadPercentage}}%)
+            </p>
+        </div>
+
+        <form method="GET" action="/grammar" style="display: flex; gap: 0.5rem; align-items: center;">
+            <input type="hidden" name="tab" value="taekim">
+            <input type="hidden" name="filter" value="{{.CurrentFilter}}">
+            <input type="text" name="q" value="{{.SearchQuery}}" placeholder="Buscar regra ou lição..." style="width: 210px;">
+            <button type="submit">Buscar</button>
+            {{if .SearchQuery}}
+                <a href="/grammar?tab=taekim&filter={{.CurrentFilter}}" style="font-size: 0.85rem; color: #666; text-decoration: none;">Limpar</a>
+            {{end}}
+        </form>
+    </div>
+
+    <!-- Filter Bar (Todos | Apenas Lidos | Não Lidos) -->
+    <div style="display: flex; gap: 0.75rem; align-items: center; margin-bottom: 1.25rem; font-size: 0.85rem; background: #fafafa; border: 1px solid #ddd; padding: 0.35rem 0.6rem; border-radius: 3px; flex-wrap: wrap;">
+        <span style="color: #555;">Filtro:</span>
+        <a href="/grammar?tab=taekim&filter=all{{if .SearchQuery}}&q={{.SearchQuery}}{{end}}"
+           style="text-decoration: none; {{if eq .CurrentFilter "all"}}font-weight: bold; border-bottom: 2px solid #0055aa; color: #111;{{else}}color: #0055aa;{{end}}">
+            Todos ({{.TotalLessons}})
+        </a>
+        <span style="color: #ccc;">|</span>
+        <a href="/grammar?tab=taekim&filter=read{{if .SearchQuery}}&q={{.SearchQuery}}{{end}}"
+           style="text-decoration: none; {{if eq .CurrentFilter "read"}}font-weight: bold; border-bottom: 2px solid #0055aa; color: #111;{{else}}color: #0055aa;{{end}}">
+            ✓ Apenas Lidos ({{.ReadCount}})
+        </a>
+        <span style="color: #ccc;">|</span>
+        <a href="/grammar?tab=taekim&filter=unread{{if .SearchQuery}}&q={{.SearchQuery}}{{end}}"
+           style="text-decoration: none; {{if eq .CurrentFilter "unread"}}font-weight: bold; border-bottom: 2px solid #0055aa; color: #111;{{else}}color: #0055aa;{{end}}">
+            ○ Não Lidos ({{.UnreadCount}})
+        </a>
+    </div>
+
+    {{if .SearchQuery}}
+        <p style="font-size: 0.9rem; margin-bottom: 1rem; color: #333;">
+            Resultados da busca no Tae Kim por: <strong>"{{.SearchQuery}}"</strong>
+        </p>
+    {{end}}
+
+    {{range .Groups}}
+    <section style="margin-bottom: 2rem;">
+        <h4 style="margin: 0 0 0.5rem 0; font-size: 1rem; border-bottom: 1px solid #ccc; padding-bottom: 0.25rem;">
+            Capítulo {{.ChapterNumber}}: {{.ChapterName}}
+        </h4>
+
+        <table style="width: 100%; font-size: 0.85rem; margin-top: 0.5rem;">
+            <thead>
+                <tr style="background: #f4f4f4;">
+                    <th style="width: 85px; text-align: center;">Status</th>
+                    <th style="width: 65px;">Seção</th>
+                    <th>Título da Lição</th>
+                    <th style="width: 250px;">Ações e Fontes</th>
+                </tr>
+            </thead>
+            <tbody>
+                {{range .Lessons}}
+                <tr>
+                    <td style="text-align: center;">
+                        <button type="button"
+                                hx-post="/grammar/lesson/toggle-read?id={{.ID}}"
+                                hx-target="this"
+                                hx-swap="outerHTML"
+                                style="cursor: pointer; font-size: 0.8rem; padding: 2px 6px; border: 1px solid {{if .IsRead}}#008800{{else}}#ccc{{end}}; background: {{if .IsRead}}#eafbe8{{else}}#fafafa{{end}}; color: {{if .IsRead}}#006600{{else}}#666{{end}}; border-radius: 3px;"
+                                title="{{if .IsRead}}Marcar como não lido{{else}}Marcar como lido{{end}}">
+                            {{if .IsRead}}✓ Lido{{else}}○ Não lido{{end}}
+                        </button>
+                    </td>
+                    <td style="font-family: monospace; font-weight: bold;">{{.SectionKey}}</td>
+                    <td>
+                        <a href="{{.LocalURL}}" style="color: #0055aa; font-weight: 500; text-decoration: none;">
+                            {{.Title}}
+                        </a>
+                    </td>
+                    <td>
+                        <a href="{{.LocalURL}}" style="color: #0055aa; text-decoration: none; margin-right: 0.75rem;">
+                            Ler no Guia
+                        </a>
+                        <a href="{{.URL}}" target="_blank" rel="noopener noreferrer" style="color: #666; text-decoration: none; margin-right: 0.75rem;">
+                            Fonte Oficial ↗
+                        </a>
+                        <a href="/quiz?topic=Tae+Kim+{{.SectionKey}}+{{.Title}}" style="{{if .IsRead}}color: #007700; font-weight: 500;{{else}}color: #888;{{end}} text-decoration: none;">
+                            Quiz 🎯
+                        </a>
+                    </td>
+                </tr>
+                {{end}}
+            </tbody>
+        </table>
+    </section>
+    {{else}}
+    <p style="color: #666; font-style: italic; margin-top: 2rem;">Nenhuma lição encontrada para o filtro ou termo pesquisado.</p>
+    {{end}}
+</div>
+{{end}}
+
+{{define "grammar_tab_quickref"}}
+<div>
+    <h3 style="margin: 0 0 0.25rem 0; font-size: 1.15rem;">Referência Rápida de Gramática Japonesa</h3>
+    <p style="margin: 0 0 1rem 0; font-size: 0.85rem; color: #666;">
+        Tabela com as partículas essenciais, formas verbais e regras de ligação com links diretos para as lições correspondentes.
+    </p>
+
+    <h4 style="margin: 1.25rem 0 0.5rem 0; font-size: 1rem;">1. Partículas Mais Utilizadas</h4>
+    <table style="width: 100%; font-size: 0.85rem; margin-bottom: 1.5rem;">
+        <thead>
+            <tr style="background: #f4f4f4;">
+                <th style="width: 70px;">Partícula</th>
+                <th>Função Principal</th>
+                <th>Exemplo</th>
+                <th style="width: 120px;">Lição Tae Kim</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><strong>は (wa)</strong></td>
+                <td>Marcador de tópico ("quanto a X...", contexto geral).</td>
+                <td>私は学生です。(Quanto a mim, sou estudante.)</td>
+                <td><a href="/grammar/lesson?id=basics/intro-to-particles" style="color: #0055aa;">Seção 3.2</a></td>
+            </tr>
+            <tr>
+                <td><strong>が (ga)</strong></td>
+                <td>Marcador de sujeito / identificador específico.</td>
+                <td>誰が来ましたか。(Quem foi que veio?)</td>
+                <td><a href="/grammar/lesson?id=basics/intro-to-particles" style="color: #0055aa;">Seção 3.2</a></td>
+            </tr>
+            <tr>
+                <td><strong>を (o)</strong></td>
+                <td>Objeto direto da ação transitiva.</td>
+                <td>本を読む。(Ler um livro.)</td>
+                <td><a href="/grammar/lesson?id=basics/particles-used-with-verbs" style="color: #0055aa;">Seção 3.6</a></td>
+            </tr>
+            <tr>
+                <td><strong>に (ni)</strong></td>
+                <td>Alvo, ponto de destino estático, tempo pontual.</td>
+                <td>日本に行く。(Ir ao Japão.)</td>
+                <td><a href="/grammar/lesson?id=basics/particles-used-with-verbs" style="color: #0055aa;">Seção 3.6</a></td>
+            </tr>
+            <tr>
+                <td><strong>で (de)</strong></td>
+                <td>Local onde ocorre a ação, meio ou instrumento.</td>
+                <td>バスで行く。(Ir de ônibus.) / 家で食べる。(Comer em casa.)</td>
+                <td><a href="/grammar/lesson?id=basics/particles-used-with-verbs" style="color: #0055aa;">Seção 3.6</a></td>
+            </tr>
+            <tr>
+                <td><strong>へ (e)</strong></td>
+                <td>Direção / vetor de movimento.</td>
+                <td>家へ帰る。(Ir em direção a casa.)</td>
+                <td><a href="/grammar/lesson?id=basics/particles-used-with-verbs" style="color: #0055aa;">Seção 3.6</a></td>
+            </tr>
+            <tr>
+                <td><strong>と (to)</strong></td>
+                <td>Conjunção completa ("e") ou companhia ("junto com").</td>
+                <td>友達と話す。(Conversar com amigo.)</td>
+                <td><a href="/grammar/lesson?id=basics/noun-related-particles" style="color: #0055aa;">Seção 3.11</a></td>
+            </tr>
+            <tr>
+                <td><strong>も (mo)</strong></td>
+                <td>Inclusão ("também", "nem"). Substitui は, が, を.</td>
+                <td>私も行く。(Eu também vou.)</td>
+                <td><a href="/grammar/lesson?id=basics/intro-to-particles" style="color: #0055aa;">Seção 3.4</a></td>
+            </tr>
+            <tr>
+                <td><strong>や (ya)</strong></td>
+                <td>Conjunção exemplificativa aberta ("... e ..., entre outros").</td>
+                <td>本や雑誌 (Livros, revistas, etc.)</td>
+                <td><a href="/grammar/lesson?id=basics/noun-related-particles" style="color: #0055aa;">Seção 3.11</a></td>
+            </tr>
+            <tr>
+                <td><strong>から / まで</strong></td>
+                <td>Ponto de partida / origem (de) e limite final (até).</td>
+                <td>東京から京都まで (De Tóquio até Quioto)</td>
+                <td><a href="/grammar/lesson?id=basics/particles-used-with-verbs" style="color: #0055aa;">Seção 3.6</a></td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h4 style="margin: 1.25rem 0 0.5rem 0; font-size: 1rem;">2. Classificação e Flexão Básica dos Verbos</h4>
+    <table style="width: 100%; font-size: 0.85rem; margin-bottom: 1.5rem;">
+        <thead>
+            <tr style="background: #f4f4f4;">
+                <th>Grupo</th>
+                <th>Dicionário</th>
+                <th>Negativo (ない)</th>
+                <th>Passado (た)</th>
+                <th>Forma て</th>
+                <th>Polida (ます)</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><strong>Ichidan (ru-verb)</strong></td>
+                <td>食べる (comer)</td>
+                <td>食べない</td>
+                <td>食べた</td>
+                <td>食べて</td>
+                <td>食べます</td>
+            </tr>
+            <tr>
+                <td><strong>Godan (u-verb: ku)</strong></td>
+                <td>書く (escrever)</td>
+                <td>書かない</td>
+                <td>書いた</td>
+                <td>書いて</td>
+                <td>書きます</td>
+            </tr>
+            <tr>
+                <td><strong>Godan (u-verb: su)</strong></td>
+                <td>話す (falar)</td>
+                <td>話さない</td>
+                <td>話した</td>
+                <td>話して</td>
+                <td>話します</td>
+            </tr>
+            <tr>
+                <td><strong>Irregular (suru)</strong></td>
+                <td>する (fazer)</td>
+                <td>しない</td>
+                <td>した</td>
+                <td>して</td>
+                <td>します</td>
+            </tr>
+            <tr>
+                <td><strong>Irregular (kuru)</strong></td>
+                <td>来る (vir)</td>
+                <td>来ない (こない)</td>
+                <td>来た (きた)</td>
+                <td>来て (きて)</td>
+                <td>来ます (きます)</td>
+            </tr>
+        </tbody>
+    </table>
+</div>
+{{end}}
+
+{{define "grammar_tab_notes"}}
+<div>
+    <div style="display: flex; gap: 1.5rem;">
+        <!-- Left: Notes List -->
+        <aside style="width: 220px; border-right: 1px solid #ccc; padding-right: 1rem;">
+            <p style="font-weight: bold; margin: 0 0 0.5rem 0; font-size: 0.95rem;">Anotações Locais</p>
+            <p style="font-size: 0.8rem; color: #666; margin: 0 0 0.75rem 0;">
+                Salvas em <code>data/knowledge/notes/</code>
+            </p>
+
+            <ul style="list-style: none; padding: 0; margin: 0 0 1rem 0; font-size: 0.85rem;">
+                {{range .Notes}}
+                <li style="margin-bottom: 0.35rem; display: flex; justify-content: space-between; align-items: center;">
+                    <a href="/grammar?tab=notes&file={{.Filename}}" style="text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #0055aa;">
+                        {{.Title}}
+                    </a>
+                    <form method="POST" action="/grammar/notes/delete" style="display: inline;" onsubmit="return confirm('Excluir esta anotação?');">
+                        <input type="hidden" name="file" value="{{.Filename}}">
+                        <button type="submit" style="background: none; border: none; color: #999; cursor: pointer; padding: 0 2px;">×</button>
+                    </form>
+                </li>
+                {{else}}
+                <li style="color: #999; font-style: italic;">Nenhuma nota criada.</li>
+                {{end}}
+            </ul>
+
+            <button type="button" onclick="document.getElementById('new-note-box').style.display='block'" style="width: 100%; font-size: 0.85rem;">
+                + Nova Anotação
+            </button>
+        </aside>
+
+        <!-- Right: Viewer or Editor -->
+        <section style="flex: 1;">
+            {{if .ActiveNote}}
+                <article style="border: 1px solid #ccc; padding: 1rem; background: #fafafa;">
+                    <h3 style="margin: 0 0 0.5rem 0; font-size: 1.2rem;">{{.ActiveNote.Title}}</h3>
+                    <p style="font-size: 0.75rem; color: #888; margin: 0 0 1rem 0;">Arquivo: <code>{{.ActiveNote.Filename}}</code></p>
+                    <div class="japanese-text" style="font-size: 0.95rem; line-height: 1.7;">
+                        {{raw .ActiveNote.HTML}}
+                    </div>
+                </article>
+            {{end}}
+
+            <!-- Form for new note (visible if no active note or on button click) -->
+            <div id="new-note-box" style="{{if .ActiveNote}}display: none; margin-top: 1rem;{{end}} border: 1px solid #ccc; padding: 1rem;">
+                <h4 style="margin: 0 0 0.5rem 0; font-size: 1rem;">Criar ou Editar Anotação (Markdown)</h4>
+                <p style="font-size: 0.8rem; color: #666; margin: 0 0 0.75rem 0;">
+                    Suporta furigana com <code>++{漢字|かんじ}++</code> e destaque com <code>==regra==</code>.
+                </p>
+                <form method="POST" action="/grammar/notes/save">
+                    <div style="margin-bottom: 0.5rem;">
+                        <input type="text" name="title" placeholder="Título da Anotação (ex: Diferença entre に e で)" required style="width: 100%;">
+                    </div>
+                    <div style="margin-bottom: 0.5rem;">
+                        <textarea name="content" rows="8" placeholder="Escreva sua explicação gramatical em Markdown..." required style="width: 100%;"></textarea>
+                    </div>
+                    <button type="submit">Salvar Anotação</button>
+                </form>
+            </div>
+        </section>
+    </div>
+</div>
+{{end}}
