@@ -236,8 +236,8 @@ func (e *Engine) GenerateBatch(ctx context.Context, modes []string, topic string
 		return []*Question{q}, nil
 	}
 
-	if count > 10 {
-		count = 10
+	if count > 50 {
+		count = 50
 	}
 
 	ctx = domain.WithOperation(ctx, "quiz_generate")
@@ -259,8 +259,8 @@ func (e *Engine) GenerateBatch(ctx context.Context, modes []string, topic string
 
 	// 1. RAG Search: Retrieve top compatible words for the topic (ONLY if marked as read)
 	vocabLimit := 5 * count
-	if vocabLimit > 20 {
-		vocabLimit = 20
+	if vocabLimit > 50 {
+		vocabLimit = 50
 	}
 	var matchedVocab []domain.VocabItem
 	if e.vectorStore != nil {

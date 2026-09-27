@@ -232,6 +232,14 @@ func (p *GeminiProvider) sendRequest(ctx context.Context, reqBody geminiRequest)
 			isRetryable = true
 		}
 
+		// Never retry billing, prepayment depleted, or 402 errors as they won't resolve within seconds
+		if geminiResp.Error != nil {
+			msgLower := strings.ToLower(geminiResp.Error.Message)
+			if geminiResp.Error.Code == 402 || strings.Contains(msgLower, "prepayment") || strings.Contains(msgLower, "depleted") || strings.Contains(msgLower, "billing") {
+				isRetryable = false
+			}
+		}
+
 		if isRetryable && attempt < maxRetries && ctx.Err() == nil {
 			time.Sleep(time.Duration(attempt+1) * 1500 * time.Millisecond)
 			continue

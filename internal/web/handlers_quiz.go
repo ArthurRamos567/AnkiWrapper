@@ -56,8 +56,8 @@ func (s *Server) handleQuizGenerate(w http.ResponseWriter, r *http.Request) {
 			count = c
 		}
 	}
-	if count > 10 {
-		count = 10
+	if count > 50 {
+		count = 50
 	}
 
 	qs, err := s.quizEngine.GenerateBatch(r.Context(), modes, topic, count)

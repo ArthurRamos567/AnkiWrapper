@@ -423,6 +423,15 @@ func TestWebRoutes(t *testing.T) {
 	if !strings.Contains(body, `name="count"`) || !strings.Contains(body, `id="count-input"`) {
 		t.Errorf("página do quiz deve conter o input de quantidade com name=count e id=count-input")
 	}
+	if !strings.Contains(body, `max="50"`) {
+		t.Errorf("input de quantidade deve ter max=50")
+	}
+	if !strings.Contains(body, "global-error-banner") {
+		t.Errorf("página deve conter o banner global de erros global-error-banner")
+	}
+	if !strings.Contains(body, "htmx:responseError") {
+		t.Errorf("página deve registrar o listener de htmx:responseError para visibilidade de falhas na UI")
+	}
 	if !strings.Contains(body, "new-vocab-toggle-btn") {
 		t.Errorf("página do quiz deve conter o botão de alternância de novas palavras")
 	}

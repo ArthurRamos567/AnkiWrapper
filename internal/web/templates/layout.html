@@ -110,6 +110,17 @@
     </header>
 
     <main>
+        <!-- Global Error Banner -->
+        <div id="global-error-banner" style="display: none; margin-bottom: 1rem; padding: 0.75rem 1rem; background: #fff2f2; border: 1px solid #d9534f; border-radius: 4px; color: #a94442;">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 0.5rem;">
+                <div style="flex: 1;">
+                    <strong id="global-error-title">⚠️ Erro na Operação:</strong>
+                    <div id="global-error-message" style="margin-top: 0.35rem; font-family: monospace; font-size: 0.85rem; white-space: pre-wrap; word-break: break-word; color: #721c24;"></div>
+                </div>
+                <button type="button" onclick="document.getElementById('global-error-banner').style.display='none'" style="cursor: pointer; background: none; border: none; font-size: 1.25rem; color: #a94442; font-weight: bold; line-height: 1; padding: 0 4px;" title="Fechar aviso">&times;</button>
+            </div>
+        </div>
+
         {{if eq .ActiveNav "quiz"}}
             {{template "quiz_content" .}}
         {{else if eq .ActiveNav "chat"}}
@@ -182,6 +193,75 @@
 
         initFurigana();
         initNewVocab();
+
+        function escapeHTML(str) {
+            if (!str) return '';
+            const p = document.createElement('p');
+            p.appendChild(document.createTextNode(str));
+            return p.innerHTML;
+        }
+
+        // Hide error banner when starting a new request
+        document.body.addEventListener('htmx:beforeRequest', function(evt) {
+            const banner = document.getElementById('global-error-banner');
+            if (banner) banner.style.display = 'none';
+        });
+
+        // Display errors visibly in UI when an HTMX response fails (4xx, 5xx)
+        document.body.addEventListener('htmx:responseError', function(evt) {
+            let errorMsg = 'Erro no servidor (' + evt.detail.xhr.status + ')';
+            if (evt.detail.xhr.responseText) {
+                errorMsg = evt.detail.xhr.responseText;
+            }
+
+            // Show top alert banner
+            const banner = document.getElementById('global-error-banner');
+            const msgEl = document.getElementById('global-error-message');
+            if (banner && msgEl) {
+                msgEl.innerText = errorMsg;
+                banner.style.display = 'block';
+                banner.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }
+
+            // Also render inline error in target element if applicable
+            const target = evt.detail.target;
+            if (target && target.id === 'quiz-container') {
+                target.innerHTML = `
+                    <div style="margin-top: 1rem; padding: 1rem; background: #fff5f5; border: 1px solid #e07070; border-radius: 4px; color: #990000;">
+                        <p style="margin: 0 0 0.5rem 0; font-weight: bold;">⚠️ Falha ao gerar o Quiz:</p>
+                        <div style="font-family: monospace; font-size: 0.85rem; background: #fff; padding: 0.5rem; border: 1px solid #f5c6cb; border-radius: 3px; word-break: break-word; max-height: 200px; overflow-y: auto;">` + escapeHTML(errorMsg) + `</div>
+                        <p style="margin: 0.75rem 0 0 0; font-size: 0.85rem; color: #666;">
+                            Tente novamente ou verifique as configurações do provedor de IA.
+                        </p>
+                    </div>
+                `;
+            } else if (target && target.id && target.id.startsWith('ans-')) {
+                target.innerHTML = `
+                    <div style="margin-top: 0.5rem; padding: 0.5rem; background: #fff5f5; border: 1px solid #e07070; border-radius: 4px; color: #990000; font-size: 0.85rem;">
+                        <strong>Erro ao avaliar resposta:</strong> ` + escapeHTML(errorMsg) + `
+                    </div>
+                `;
+            }
+        });
+
+        // Handle network connection loss / timeouts
+        document.body.addEventListener('htmx:sendError', function(evt) {
+            const banner = document.getElementById('global-error-banner');
+            const msgEl = document.getElementById('global-error-message');
+            if (banner && msgEl) {
+                msgEl.innerText = 'Falha de conexão com o servidor. Verifique se o servidor está ativo.';
+                banner.style.display = 'block';
+                banner.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }
+            const target = evt.detail.target;
+            if (target && target.id === 'quiz-container') {
+                target.innerHTML = `
+                    <div style="margin-top: 1rem; padding: 1rem; background: #fff5f5; border: 1px solid #e07070; border-radius: 4px; color: #990000;">
+                        <p style="margin: 0; font-weight: bold;">⚠️ Sem resposta do servidor. A requisição expirou ou a conexão foi interrompida.</p>
+                    </div>
+                `;
+            }
+        });
     </script>
 </body>
 </html>
