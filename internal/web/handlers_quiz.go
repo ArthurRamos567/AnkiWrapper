@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"anki-wrapper/internal/domain"
 	"anki-wrapper/internal/quiz"
@@ -15,16 +16,32 @@ func (s *Server) handleQuizPage(w http.ResponseWriter, r *http.Request) {
 	stats, _ := s.quizRepo.GetQuizStats(ctx)
 	vocab := s.getVocabSnapshot()
 
+	var sessions []domain.ChatSession
+	if s.chatRepo != nil {
+		sessions, _ = s.chatRepo.GetSessions(ctx)
+	}
+
 	topicPrefill := r.URL.Query().Get("topic")
+	attachSessionID := r.URL.Query().Get("attach_session")
+	if attachSessionID != "" && topicPrefill == "" {
+		for _, sess := range sessions {
+			if sess.ID == attachSessionID {
+				topicPrefill = sess.Title
+				break
+			}
+		}
+	}
 
 	data := map[string]any{
-		"ActiveNav":      "quiz",
-		"VocabCount":     len(vocab),
-		"SelectedMode":   "multiple_choice",
-		"SelectedTopic":  topicPrefill,
-		"ActiveQuestion": nil,
-		"RecentQuizzes":  history,
-		"Stats":          stats,
+		"ActiveNav":         "quiz",
+		"VocabCount":        len(vocab),
+		"SelectedMode":      "multiple_choice",
+		"SelectedTopic":     topicPrefill,
+		"ActiveQuestion":    nil,
+		"RecentQuizzes":     history,
+		"Stats":             stats,
+		"ChatSessions":      sessions,
+		"AttachedSessionID": attachSessionID,
 	}
 
 	if err := s.tmpl.ExecuteTemplate(w, "layout.html", data); err != nil {
@@ -49,6 +66,30 @@ func (s *Server) handleQuizGenerate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	topic := r.FormValue("topic")
+	chatSessionID := r.FormValue("chat_session_id")
+	var chatContext string
+	if chatSessionID != "" && s.chatRepo != nil {
+		msgs, err := s.chatRepo.GetChatMessages(r.Context(), chatSessionID)
+		if err == nil && len(msgs) > 0 {
+			var sb strings.Builder
+			start := 0
+			if len(msgs) > 10 {
+				start = len(msgs) - 10
+			}
+			for _, m := range msgs[start:] {
+				role := "Estudante"
+				if m.Role == "assistant" {
+					role = "Tutor"
+				}
+				sb.WriteString(fmt.Sprintf("%s: %s\n", role, m.Content))
+			}
+			chatContext = sb.String()
+		}
+	}
+
+	if strings.TrimSpace(topic) == "" && chatContext != "" {
+		topic = "Conversa Anexada do Chat"
+	}
 
 	count := 1
 	if cStr := r.FormValue("count"); cStr != "" {
@@ -60,7 +101,7 @@ func (s *Server) handleQuizGenerate(w http.ResponseWriter, r *http.Request) {
 		count = 50
 	}
 
-	qs, err := s.quizEngine.GenerateBatch(r.Context(), modes, topic, count)
+	qs, err := s.quizEngine.GenerateBatch(r.Context(), modes, topic, count, chatContext)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Erro ao gerar questão: %v", err), http.StatusInternalServerError)
 		return

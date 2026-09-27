@@ -28,6 +28,11 @@
         <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #ccc; padding-bottom: 0.35rem; flex-wrap: wrap; gap: 0.5rem;">
             <strong>{{.CurrentSessionTitle}}</strong>
             <div style="display: flex; align-items: center; gap: 0.5rem;">
+                {{if .CurrentSessionID}}
+                <a href="/quiz?attach_session={{.CurrentSessionID}}" style="font-size: 0.8rem; text-decoration: none; color: #0055aa; border: 1px solid #0055aa; padding: 2px 6px; border-radius: 3px;" title="Gerar um quiz baseado nesta conversa">
+                    📝 Gerar Quiz
+                </a>
+                {{end}}
                 <label for="chat-mode-select" style="font-size: 0.8rem; color: #555;">Idioma:</label>
                 <select id="chat-mode-select" onchange="updateChatMode(this.value)" style="font-size: 0.8rem; padding: 2px 4px;">
                     <option value="auto">Automático (Adaptar)</option>
@@ -58,12 +63,14 @@
         </div>
 
         <div style="border-top: 1px solid #ccc; padding-top: 0.5rem; margin-top: auto;">
-            <form hx-post="/chat/send" hx-target="#chat-messages" hx-swap="beforeend" hx-indicator="#chat-typing-indicator, #chat-spinner" onsubmit="clearInput(this)" style="display: flex; gap: 0.5rem;">
+            <form id="chat-form" hx-post="/chat/send" hx-target="#chat-messages" hx-swap="beforeend" hx-indicator="#chat-typing-indicator, #chat-spinner" onsubmit="clearInput(this)" style="display: flex; gap: 0.5rem; align-items: flex-end;">
                 <input type="hidden" name="session_id" value="{{.CurrentSessionID}}">
                 <input type="hidden" name="chat_mode" id="chat-mode-hidden" value="auto">
-                <input type="text" id="chat-input" name="message" placeholder="Escreva sua mensagem ou dúvida..." required autofocus style="flex: 1;">
-                <button type="submit">Enviar</button>
-                <span id="chat-spinner" class="htmx-indicator">...</span>
+                <textarea id="chat-input" name="message" placeholder="Escreva sua mensagem ou dúvida... (Enter envia, Shift+Enter quebra linha)" required autofocus rows="2" style="flex: 1; resize: vertical; min-height: 52px; max-height: 200px; padding: 6px 8px; font-family: inherit; font-size: 0.95rem; box-sizing: border-box;"></textarea>
+                <div style="display: flex; flex-direction: column; gap: 0.35rem; align-items: center;">
+                    <button type="submit" style="padding: 6px 14px; height: 52px;">Enviar</button>
+                    <span id="chat-spinner" class="htmx-indicator">...</span>
+                </div>
             </form>
         </div>
     </section>
@@ -86,9 +93,41 @@ function updateChatMode(val) {
 
 initChatMode();
 
+function initChatInput() {
+    const chatInput = document.getElementById('chat-input');
+    if (!chatInput) return;
+
+    chatInput.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            if (this.value.trim() !== '') {
+                const form = this.closest('form');
+                if (form) {
+                    if (form.requestSubmit) {
+                        form.requestSubmit();
+                    } else {
+                        htmx.trigger(form, 'submit');
+                    }
+                }
+            }
+        }
+    });
+
+    chatInput.addEventListener('input', function() {
+        this.style.height = 'auto';
+        const newHeight = Math.min(Math.max(this.scrollHeight, 52), 200);
+        this.style.height = newHeight + 'px';
+    });
+}
+initChatInput();
+
 function clearInput(form) {
     setTimeout(() => {
-        document.getElementById('chat-input').value = '';
+        const input = document.getElementById('chat-input');
+        if (input) {
+            input.value = '';
+            input.style.height = '52px';
+        }
         scrollChatToBottom();
     }, 50);
 }

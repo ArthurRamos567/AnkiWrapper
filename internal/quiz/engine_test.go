@@ -11,18 +11,21 @@ import (
 
 // MockLLMProvider for Quiz Engine tests
 type MockLLMProvider struct {
-	mcRaw    map[string]any
-	clozeRaw map[string]any
-	freeRaw  map[string]any
-	evalRaw  map[string]any
-	batchRaw map[string]any
+	mcRaw      map[string]any
+	clozeRaw   map[string]any
+	freeRaw    map[string]any
+	evalRaw    map[string]any
+	batchRaw   map[string]any
+	lastPrompt string
 }
 
 func (m *MockLLMProvider) ExecutePrompt(ctx context.Context, prompt string) (string, error) {
+	m.lastPrompt = prompt
 	return "ok", nil
 }
 
 func (m *MockLLMProvider) ExecuteStructured(ctx context.Context, prompt string, schema string, target any) error {
+	m.lastPrompt = prompt
 	var data any
 	if strings.Contains(prompt, "Modo do Quiz: \"multiple_choice\"") {
 		data = m.mcRaw
@@ -232,3 +235,57 @@ func TestQuizGenerateBatch(t *testing.T) {
 		t.Errorf("dados incorretos na questão 2: %+v", qs2[1])
 	}
 }
+
+func TestQuizGenerateWithChatContext(t *testing.T) {
+	mockLLM := &MockLLMProvider{
+		mcRaw: map[string]any{
+			"prompt_text":    "Qual partícula indica o local de destino?",
+			"sentence":       "駅[えき]____行[い]きます。",
+			"options":        []string{"に", "で", "を", "が"},
+			"correct_option": "に",
+			"hint":           "Verbo de deslocamento",
+			"explanation":    "A partícula に indica o destino.",
+		},
+		batchRaw: map[string]any{
+			"questions": []map[string]any{
+				{
+					"mode":           "multiple_choice",
+					"prompt_text":    "Qual partícula indica o local de destino?",
+					"sentence":       "駅[えき]____行[い]きます。",
+					"options":        []string{"に", "で", "を", "が"},
+					"correct_answer": "に",
+					"hint":           "Verbo de deslocamento",
+					"explanation":    "A partícula に indica o destino.",
+				},
+			},
+		},
+	}
+
+	engine := NewEngine(mockLLM, &MockPromptRepository{}, nil, nil, nil)
+	chatTranscript := "Estudante: Como uso a partícula に com verbos de movimento?\nTutor: A partícula に indica o destino com verbos como 行く e 来る."
+
+	// Test single question generation with chatContext
+	_, err := engine.GenerateQuestion(context.Background(), "multiple_choice", "Partículas", chatTranscript)
+	if err != nil {
+		t.Fatalf("erro ao gerar questão com chatContext: %v", err)
+	}
+	if !strings.Contains(mockLLM.lastPrompt, "[CONTEÚDO DA CONVERSA RECENTE DO CHAT ANEXADA]") {
+		t.Errorf("esperado prompt com seção de conversa anexada, obtido:\n%s", mockLLM.lastPrompt)
+	}
+	if !strings.Contains(mockLLM.lastPrompt, "Como uso a partícula に") {
+		t.Errorf("esperado conteúdo da conversa no prompt, obtido:\n%s", mockLLM.lastPrompt)
+	}
+
+	// Test batch generation with chatContext
+	_, err = engine.GenerateBatch(context.Background(), []string{"multiple_choice"}, "Partículas", 2, chatTranscript)
+	if err != nil {
+		t.Fatalf("erro ao gerar batch com chatContext: %v", err)
+	}
+	if !strings.Contains(mockLLM.lastPrompt, "[CONTEÚDO DA CONVERSA RECENTE DO CHAT ANEXADA]") {
+		t.Errorf("esperado prompt do batch com seção de conversa anexada, obtido:\n%s", mockLLM.lastPrompt)
+	}
+	if !strings.Contains(mockLLM.lastPrompt, "Como uso a partícula に") {
+		t.Errorf("esperado conteúdo da conversa no prompt do batch, obtido:\n%s", mockLLM.lastPrompt)
+	}
+}
+

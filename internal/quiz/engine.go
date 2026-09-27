@@ -37,8 +37,8 @@ func NewEngine(
 	}
 }
 
-// GenerateQuestion creates a quiz question given a mode, topic, and vector-searched vocabulary.
-func (e *Engine) GenerateQuestion(ctx context.Context, mode, topic string) (*Question, error) {
+// GenerateQuestion creates a quiz question given a mode, topic, vector-searched vocabulary and optional chat context.
+func (e *Engine) GenerateQuestion(ctx context.Context, mode, topic string, chatContext ...string) (*Question, error) {
 	ctx = domain.WithOperation(ctx, "quiz_generate")
 	if mode == "" {
 		mode = "multiple_choice"
@@ -116,6 +116,11 @@ func (e *Engine) GenerateQuestion(ctx context.Context, mode, topic string) (*Que
 		}
 	}
 
+	var chatSection string
+	if len(chatContext) > 0 && strings.TrimSpace(chatContext[0]) != "" {
+		chatSection = fmt.Sprintf("\n[CONTEÚDO DA CONVERSA RECENTE DO CHAT ANEXADA]:\nO estudante anexou a conversa abaixo como contexto. Crie a questão baseando-se diretamente nas explicações, dúvidas, vocabulário e tópicos tratados nesta conversa:\n%s\n", strings.TrimSpace(chatContext[0]))
+	}
+
 	promptBuilder := fmt.Sprintf(`%s
 
 %s
@@ -124,6 +129,7 @@ Idioma de suporte para explicações e enunciados: %s.
 Tópico solicitado: "%s".
 Modo do Quiz: "%s".
 
+%s
 %s
 %s
 
@@ -147,7 +153,7 @@ DIRETRIZES DE ENUNCIADO:
    - "sentence": frase em japonês com a lacuna "____".
    - "correct_answer": a resposta que preenche a lacuna.
 4. "hint" (opcional): Dica sutil e curta, sem revelar a resposta.
-`, generatorPrompt, softN1Rule, langName, topic, mode, vocabContext.String(), grammarContext.String(), langName)
+`, generatorPrompt, softN1Rule, langName, topic, mode, vocabContext.String(), grammarContext.String(), chatSection, langName)
 
 	q := &Question{
 		ID:                fmt.Sprintf("q_%d", time.Now().UnixNano()),
@@ -221,13 +227,14 @@ DIRETRIZES DE ENUNCIADO:
 }
 
 // GenerateBatch creates count quiz questions for the given modes and topic in an efficient single LLM call.
-func (e *Engine) GenerateBatch(ctx context.Context, modes []string, topic string, count int) ([]*Question, error) {
+// GenerateBatch creates count quiz questions for the given modes, topic and optional chat context in an efficient single LLM call.
+func (e *Engine) GenerateBatch(ctx context.Context, modes []string, topic string, count int, chatContext ...string) ([]*Question, error) {
 	if count <= 1 {
 		selectedMode := "multiple_choice"
 		if len(modes) > 0 {
 			selectedMode = modes[rand.IntN(len(modes))]
 		}
-		q, err := e.GenerateQuestion(ctx, selectedMode, topic)
+		q, err := e.GenerateQuestion(ctx, selectedMode, topic, chatContext...)
 		if err != nil {
 			return nil, err
 		}
@@ -320,6 +327,11 @@ func (e *Engine) GenerateBatch(ctx context.Context, modes []string, topic string
 		}
 	}
 
+	var chatSection string
+	if len(chatContext) > 0 && strings.TrimSpace(chatContext[0]) != "" {
+		chatSection = fmt.Sprintf("\n[CONTEÚDO DA CONVERSA RECENTE DO CHAT ANEXADA]:\nO estudante anexou a conversa abaixo como contexto. Crie questões que exercitem e testem diretamente os tópicos, dúvidas, explicações e termos abordados nesta conversa:\n%s\n", strings.TrimSpace(chatContext[0]))
+	}
+
 	modesStr := strings.Join(modes, ", ")
 	promptBuilder := fmt.Sprintf(`%s
 
@@ -329,6 +341,7 @@ Idioma de suporte para explicações e enunciados: %s.
 Tópico solicitado: "%s".
 Modos permitidos para as questões: [%s].
 
+%s
 %s
 %s
 
@@ -353,7 +366,7 @@ DIRETRIZES PARA CADA MODO:
    - "sentence": frase em japonês com a lacuna "____".
    - "correct_answer": a resposta que preenche a lacuna.
 4. "hint" (opcional): Dica sutil e curta, sem revelar a resposta.
-`, generatorPrompt, softN1Rule, langName, topic, modesStr, vocabContext.String(), grammarContext.String(), count, modesStr, langName)
+`, generatorPrompt, softN1Rule, langName, topic, modesStr, vocabContext.String(), grammarContext.String(), chatSection, count, modesStr, langName)
 
 	var raw struct {
 		Questions []struct {

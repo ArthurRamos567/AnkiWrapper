@@ -122,6 +122,7 @@ func (m *MockWebQuizRepo) GetRecentQuizzes(ctx context.Context, limit int) ([]do
 // MockChatRepo for web tests
 type MockWebChatRepo struct {
 	sessions []domain.ChatSession
+	messages map[string][]domain.ChatMessage
 }
 
 func (m *MockWebChatRepo) CreateSession(ctx context.Context, id, title string) error {
@@ -141,6 +142,9 @@ func (m *MockWebChatRepo) SaveChatMessage(ctx context.Context, msg domain.ChatMe
 	return nil
 }
 func (m *MockWebChatRepo) GetChatMessages(ctx context.Context, sessionID string) ([]domain.ChatMessage, error) {
+	if m.messages != nil {
+		return m.messages[sessionID], nil
+	}
 	return nil, nil
 }
 func (m *MockWebChatRepo) ClearSessionMessages(ctx context.Context, sessionID string) error {
@@ -366,8 +370,18 @@ func setupTestServer(t *testing.T) (*Server, *MockWebTelemetryRepo) {
 		prompts:  map[string]string{"chat_system": "Prompt"},
 	}
 	mockQuizRepo := &MockWebQuizRepo{}
-	mockChatRepo := &MockWebChatRepo{}
 	mockTelemetry := &MockWebTelemetryRepo{}
+	mockChatRepo := &MockWebChatRepo{
+		sessions: []domain.ChatSession{
+			{ID: "sess_1", Title: "Conversa de Partículas"},
+		},
+		messages: map[string][]domain.ChatMessage{
+			"sess_1": {
+				{ID: 1, SessionID: "sess_1", Role: "user", Content: "Como usar a partícula に?"},
+				{ID: 2, SessionID: "sess_1", Role: "assistant", Content: "A partícula に indica destino."},
+			},
+		},
+	}
 	mockGrammar := &MockWebGrammarRepo{}
 	mockVector := &MockWebVectorRepo{
 		items: []domain.VocabItem{
@@ -435,8 +449,29 @@ func TestWebRoutes(t *testing.T) {
 	if !strings.Contains(body, "new-vocab-toggle-btn") {
 		t.Errorf("página do quiz deve conter o botão de alternância de novas palavras")
 	}
-	if !strings.Contains(body, "highlight-new-vocab") {
-		t.Errorf("página do quiz deve conter a classe de destaque highlight-new-vocab")
+	if !strings.Contains(body, "btn-toggle-attach") {
+		t.Errorf("página do quiz deve conter o botão de anexar conversa btn-toggle-attach")
+	}
+	if !strings.Contains(body, "attach-chat-box") {
+		t.Errorf("página do quiz deve conter a caixa attach-chat-box")
+	}
+	if !strings.Contains(body, "Conversa de Partículas") {
+		t.Errorf("página do quiz deve listar sessões de chat disponíveis para anexar")
+	}
+
+	// 2b. Quiz Page with attach_session query param
+	rec = httptest.NewRecorder()
+	req = httptest.NewRequest("GET", "/quiz?attach_session=sess_1", nil)
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Errorf("esperado status 200 no /quiz?attach_session=sess_1, obtido %d", rec.Code)
+	}
+	attachedBody := rec.Body.String()
+	if !strings.Contains(attachedBody, `value="Conversa de Partículas"`) {
+		t.Errorf("tópico deve vir pré-preenchido com o título da sessão anexada")
+	}
+	if !strings.Contains(attachedBody, `value="sess_1" selected`) {
+		t.Errorf("sessão de chat deve vir selecionada no dropdown de anexo")
 	}
 
 	// 3. Chat Page
@@ -452,6 +487,12 @@ func TestWebRoutes(t *testing.T) {
 	}
 	if !strings.Contains(chatBody, `name="chat_mode"`) {
 		t.Errorf("formulário do chat deve conter o input hidden com name=chat_mode")
+	}
+	if !strings.Contains(chatBody, `<textarea id="chat-input"`) {
+		t.Errorf("página do chat deve usar textarea expandível id=chat-input em vez de input comum")
+	}
+	if !strings.Contains(chatBody, "/quiz?attach_session=sess_1") {
+		t.Errorf("página do chat deve conter link para gerar quiz a partir da sessão ativa")
 	}
 
 	// 4. Prompts Page
@@ -668,6 +709,24 @@ func TestWebRoutes(t *testing.T) {
 	}
 	if !strings.Contains(genBody, "Qual partícula usar?") || !strings.Contains(genBody, "Complete a lacuna:") {
 		t.Errorf("resposta do /quiz/generate deve conter as questões geradas, obtido: %s", genBody)
+	}
+
+	// 20b. Quiz Generate with attached chat session
+	attachForm := url.Values{
+		"count":           {"1"},
+		"modes":           {"multiple_choice"},
+		"chat_session_id": {"sess_1"},
+	}
+	rec = httptest.NewRecorder()
+	req = httptest.NewRequest("POST", "/quiz/generate", strings.NewReader(attachForm.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Errorf("esperado status 200 no /quiz/generate com chat anexado, obtido %d", rec.Code)
+	}
+	attachGenBody := rec.Body.String()
+	if !strings.Contains(attachGenBody, "Qual partícula usar?") {
+		t.Errorf("resposta do /quiz/generate com anexo deve gerar questão normalmente, obtido: %s", attachGenBody)
 	}
 
 	// 21. Quiz Answer Endpoint
