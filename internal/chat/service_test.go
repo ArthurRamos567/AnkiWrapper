@@ -170,3 +170,28 @@ func TestChatServiceReply(t *testing.T) {
 		t.Errorf("ordem das mensagens incorreta: %s, %s", msgs[0].Role, msgs[1].Role)
 	}
 }
+
+func TestChatServiceReplyModes(t *testing.T) {
+	mockLLM := &MockLLMProvider{
+		replyJapanese: "A formação dos kanjis possui 4 padrões principais.",
+	}
+	mockPrompts := &MockPromptRepository{
+		prompts: map[string]string{
+			"chat_system": "Você é tutor.",
+		},
+		settings: map[string]string{
+			"support_lang": "pt",
+		},
+	}
+	mockChatRepo := &MockChatRepository{}
+	svc := NewService(mockLLM, mockPrompts, nil, mockChatRepo, nil)
+
+	// Mode PT
+	resp, err := svc.Reply(context.Background(), "sess_pt", "explique os kanjis", "pt")
+	if err != nil {
+		t.Fatalf("erro no Reply pt: %v", err)
+	}
+	if resp.Content != "A formação dos kanjis possui 4 padrões principais." {
+		t.Errorf("conteúdo inesperado no modo PT: %s", resp.Content)
+	}
+}

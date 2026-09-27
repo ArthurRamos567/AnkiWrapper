@@ -11,11 +11,11 @@ import (
 const ChatResponseSchema = `{
   "type": "object",
   "properties": {
-    "reply_japanese": {"type": "string"},
+    "reply": {"type": "string"},
     "translation": {"type": "string"},
     "pedagogical_note": {"type": "string"}
   },
-  "required": ["reply_japanese", "translation", "pedagogical_note"]
+  "required": ["reply"]
 }`
 
 // Service manages conversational sessions and pedagogical AI responses with injected dependencies.
@@ -44,8 +44,13 @@ func NewService(
 	}
 }
 
-// Reply generates a chat response for the given user message and session.
-func (s *Service) Reply(ctx context.Context, sessionID, userMessage string) (*domain.ChatMessage, error) {
+// Reply generates a chat response for the given user message and session, adapting to the selected chatMode (pt, ja, auto).
+func (s *Service) Reply(ctx context.Context, sessionID, userMessage string, mode ...string) (*domain.ChatMessage, error) {
+	chatMode := "auto"
+	if len(mode) > 0 && mode[0] != "" {
+		chatMode = mode[0]
+	}
+
 	ctx = domain.WithOperation(ctx, "chat_reply")
 	// Ensure session exists
 	if s.chatRepo != nil {
@@ -123,11 +128,35 @@ func (s *Service) Reply(ctx context.Context, sessionID, userMessage string) (*do
 		}
 	}
 
+	var modeGuideline string
+	switch chatMode {
+	case "pt":
+		modeGuideline = fmt.Sprintf(`DIRETRIZ DE IDIOMA E PAPEL OBRIGATÓRIA:
+- O estudante selecionou o modo "Português (Tutor / Dúvidas)".
+- Responda EXCLUSIVAMENTE em %s no campo "reply".
+- Explique conceitos, regras gramaticais, etimologia, radicais e tire dúvidas com clareza pedagógica em %s.
+- Ao citar termos, frases ou kanjis em japonês como exemplos, anote-os com furigana no formato Anki: 漢字[かんじ].
+- O campo "translation" pode ficar vazio (pois a resposta principal já está em %s).`, langName, langName, langName)
+	case "ja":
+		modeGuideline = fmt.Sprintf(`DIRETRIZ DE IDIOMA E PAPEL OBRIGATÓRIA:
+- O estudante selecionou o modo "Japonês (Conversação)".
+- Responda em Japonês no campo "reply", mantendo uma conversa natural e fluente no nível do estudante.
+- Anote todos os kanjis em japonês com furigana no formato Anki: 漢字[かんじ].
+- Forneça a tradução completa em %s no campo "translation".`, langName)
+	default: // "auto"
+		modeGuideline = fmt.Sprintf(`DIRETRIZ DE IDIOMA E ADAPTAÇÃO:
+- O estudante selecionou o modo "Automático (Adaptar)".
+- Se a mensagem do estudante for uma pergunta, dúvida ou pedido de explicação em %s, responda em %s no campo "reply" (anotando termos ou exemplos em japonês com furigana 漢字[かんじ]).
+- Se a mensagem do estudante for uma prática de conversa em Japonês, converse e responda em Japonês no campo "reply" (com furigana Anki 漢字[かんじ]) e forneça a tradução de apoio em %s no campo "translation".`, langName, langName, langName)
+	}
+
 	fullPrompt := fmt.Sprintf(`%s
 
 %s
 
-Idioma de suporte para tradução e notas pedagógicas: %s.
+Idioma de suporte configurado: %s.
+
+%s
 
 %s
 %s
@@ -137,10 +166,14 @@ Histórico recente da conversa:
 
 Nova mensagem do estudante: "%s"
 
-Responda em JSON seguindo o schema. Lembre-se de anotar kanjis na resposta em japonês com furigana: 漢字[かんじ].
-`, chatSystemPrompt, softN1Rule, langName, vocabContext, grammarContext, histBuilder.String(), userMessage)
+INSTRUÇÕES DE FORMATO:
+- Responda EXCLUSIVAMENTE em JSON estruturado de acordo com o schema.
+- Preencha o campo "reply" com o texto da sua resposta.
+- Sempre anote termos ou kanjis em japonês com furigana Anki: 漢字[かんじ].
+`, chatSystemPrompt, softN1Rule, langName, modeGuideline, vocabContext, grammarContext, histBuilder.String(), userMessage)
 
 	var raw struct {
+		Reply           string `json:"reply"`
 		ReplyJapanese   string `json:"reply_japanese"`
 		Translation     string `json:"translation"`
 		PedagogicalNote string `json:"pedagogical_note"`
@@ -150,11 +183,16 @@ Responda em JSON seguindo o schema. Lembre-se de anotar kanjis na resposta em ja
 		return nil, fmt.Errorf("falha ao gerar resposta do chat: %w", err)
 	}
 
+	replyText := raw.Reply
+	if replyText == "" && raw.ReplyJapanese != "" {
+		replyText = raw.ReplyJapanese
+	}
+
 	assistantMsg := domain.ChatMessage{
 		SessionID:       sessionID,
 		Role:            "assistant",
-		Content:         raw.ReplyJapanese,
-		FuriganaHTML:    FuriganaToHTML(raw.ReplyJapanese),
+		Content:         replyText,
+		FuriganaHTML:    FuriganaToHTML(replyText),
 		Translation:     raw.Translation,
 		PedagogicalNote: raw.PedagogicalNote,
 		GrammarRef:      matchedGrammar,

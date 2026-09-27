@@ -25,12 +25,20 @@
 
     <!-- Main Chat Window -->
     <section style="flex: 1; display: flex; flex-direction: column; min-height: 60vh;">
-        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #ccc; padding-bottom: 0.25rem;">
+        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #ccc; padding-bottom: 0.35rem; flex-wrap: wrap; gap: 0.5rem;">
             <strong>{{.CurrentSessionTitle}}</strong>
-            <form hx-post="/chat/clear" hx-target="#chat-messages">
-                <input type="hidden" name="session_id" value="{{.CurrentSessionID}}">
-                <button type="submit" style="font-size: 0.75rem;">Limpar</button>
-            </form>
+            <div style="display: flex; align-items: center; gap: 0.5rem;">
+                <label for="chat-mode-select" style="font-size: 0.8rem; color: #555;">Idioma:</label>
+                <select id="chat-mode-select" onchange="updateChatMode(this.value)" style="font-size: 0.8rem; padding: 2px 4px;">
+                    <option value="auto">Automático (Adaptar)</option>
+                    <option value="pt">Português (Tutor / Dúvidas)</option>
+                    <option value="ja">Japonês (Conversação)</option>
+                </select>
+                <form hx-post="/chat/clear" hx-target="#chat-messages" style="display: inline;">
+                    <input type="hidden" name="session_id" value="{{.CurrentSessionID}}">
+                    <button type="submit" style="font-size: 0.75rem;">Limpar</button>
+                </form>
+            </div>
         </div>
 
         <div id="chat-messages" style="flex: 1; overflow-y: auto; max-height: 55vh; padding: 0.5rem 0; display: flex; flex-direction: column; gap: 0.75rem;">
@@ -52,7 +60,8 @@
         <div style="border-top: 1px solid #ccc; padding-top: 0.5rem; margin-top: auto;">
             <form hx-post="/chat/send" hx-target="#chat-messages" hx-swap="beforeend" hx-indicator="#chat-typing-indicator, #chat-spinner" onsubmit="clearInput(this)" style="display: flex; gap: 0.5rem;">
                 <input type="hidden" name="session_id" value="{{.CurrentSessionID}}">
-                <input type="text" id="chat-input" name="message" required autofocus style="flex: 1;">
+                <input type="hidden" name="chat_mode" id="chat-mode-hidden" value="auto">
+                <input type="text" id="chat-input" name="message" placeholder="Escreva sua mensagem ou dúvida..." required autofocus style="flex: 1;">
                 <button type="submit">Enviar</button>
                 <span id="chat-spinner" class="htmx-indicator">...</span>
             </form>
@@ -61,6 +70,22 @@
 </div>
 
 <script>
+function initChatMode() {
+    const saved = localStorage.getItem('chat_reply_mode') || 'auto';
+    const select = document.getElementById('chat-mode-select');
+    const hidden = document.getElementById('chat-mode-hidden');
+    if (select) select.value = saved;
+    if (hidden) hidden.value = saved;
+}
+
+function updateChatMode(val) {
+    localStorage.setItem('chat_reply_mode', val);
+    const hidden = document.getElementById('chat-mode-hidden');
+    if (hidden) hidden.value = val;
+}
+
+initChatMode();
+
 function clearInput(form) {
     setTimeout(() => {
         document.getElementById('chat-input').value = '';
@@ -94,13 +119,13 @@ setTimeout(scrollChatToBottom, 100);
 {{define "chat_bubble_assistant"}}
 <div style="font-size: 0.95rem; border-left: 2px solid #ccc; padding-left: 0.5rem;">
     <strong style="color: #666;">Assistente:</strong>
-    <div class="japanese-text" style="margin: 0.2rem 0;">
+    <div style="margin: 0.35rem 0; line-height: 1.6; white-space: pre-wrap;">
         {{raw .FuriganaHTML}}
     </div>
     {{if .Translation}}
-    <details style="font-size: 0.85rem; color: #666;">
-        <summary style="cursor: pointer;">Tradução</summary>
-        <p style="margin: 0.2rem 0 0 0.5rem; color: #333;">{{.Translation}}</p>
+    <details style="font-size: 0.85rem; color: #666; margin-top: 0.25rem;">
+        <summary style="cursor: pointer;">Tradução de Apoio</summary>
+        <p style="margin: 0.2rem 0 0 0.5rem; color: #333; white-space: pre-wrap;">{{.Translation}}</p>
     </details>
     {{end}}
     {{if .PedagogicalNote}}

@@ -446,6 +446,13 @@ func TestWebRoutes(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Errorf("esperado status 200 no /chat, obtido %d", rec.Code)
 	}
+	chatBody := rec.Body.String()
+	if !strings.Contains(chatBody, "chat-mode-select") {
+		t.Errorf("página do chat deve conter o seletor de modo de resposta chat-mode-select")
+	}
+	if !strings.Contains(chatBody, `name="chat_mode"`) {
+		t.Errorf("formulário do chat deve conter o input hidden com name=chat_mode")
+	}
 
 	// 4. Prompts Page
 	rec = httptest.NewRecorder()

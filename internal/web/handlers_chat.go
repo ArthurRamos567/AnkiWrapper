@@ -63,6 +63,7 @@ func (s *Server) handleChatSend(w http.ResponseWriter, r *http.Request) {
 
 	msg := r.FormValue("message")
 	sessionID := r.FormValue("session_id")
+	chatMode := r.FormValue("chat_mode")
 	if sessionID == "" {
 		sessionID = "default"
 	}
@@ -76,7 +77,7 @@ func (s *Server) handleChatSend(w http.ResponseWriter, r *http.Request) {
 	_ = s.tmpl.ExecuteTemplate(w, "chat_bubble_user", userMsg)
 
 	// Call AI
-	assistantMsg, err := s.chatService.Reply(r.Context(), sessionID, msg)
+	assistantMsg, err := s.chatService.Reply(r.Context(), sessionID, msg, chatMode)
 	if err != nil {
 		errBubble := domain.ChatMessage{
 			Role:         "assistant",
