@@ -491,6 +491,9 @@ func TestWebRoutes(t *testing.T) {
 	if !strings.Contains(chatBody, `<textarea id="chat-input"`) {
 		t.Errorf("página do chat deve usar textarea expandível id=chat-input em vez de input comum")
 	}
+	if strings.Contains(chatBody, `<textarea id="chat-input" name="message" placeholder=`) {
+		t.Errorf("campo de texto do chat não deve conter preview/placeholder")
+	}
 	if !strings.Contains(chatBody, "/quiz?attach_session=sess_1") {
 		t.Errorf("página do chat deve conter link para gerar quiz a partir da sessão ativa")
 	}

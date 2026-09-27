@@ -66,7 +66,7 @@
             <form id="chat-form" hx-post="/chat/send" hx-target="#chat-messages" hx-swap="beforeend" hx-indicator="#chat-typing-indicator, #chat-spinner" onsubmit="clearInput(this)" style="display: flex; gap: 0.5rem; align-items: flex-end;">
                 <input type="hidden" name="session_id" value="{{.CurrentSessionID}}">
                 <input type="hidden" name="chat_mode" id="chat-mode-hidden" value="auto">
-                <textarea id="chat-input" name="message" placeholder="Escreva sua mensagem ou dúvida... (Enter envia, Shift+Enter quebra linha)" required autofocus rows="2" style="flex: 1; resize: vertical; min-height: 52px; max-height: 200px; padding: 6px 8px; font-family: inherit; font-size: 0.95rem; box-sizing: border-box;"></textarea>
+                <textarea id="chat-input" name="message" required autofocus rows="2" style="flex: 1; resize: vertical; min-height: 52px; max-height: 200px; padding: 6px 8px; font-family: inherit; font-size: 0.95rem; box-sizing: border-box;"></textarea>
                 <div style="display: flex; flex-direction: column; gap: 0.35rem; align-items: center;">
                     <button type="submit" style="padding: 6px 14px; height: 52px;">Enviar</button>
                     <span id="chat-spinner" class="htmx-indicator">...</span>
