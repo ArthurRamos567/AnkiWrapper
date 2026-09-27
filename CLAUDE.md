@@ -20,16 +20,18 @@ AnkiWrapper is a Japanese learning assistant built in **Go + HTMX**, running loc
 
 ---
 
-## UI / UX Design Guidelines
+## UI / UX Design Guidelines — Simplicidade Máxima (Keep It Simple)
 
-Strict design constraints requested by the user:
+A premissa fundamental da interface é **SIMPLICIDADE MÁXIMA**:
+- **Zero Emojis na Interface**: NUNCA use emojis em botões, abas, links, badges, modais ou mensagens de status (nada de 📎, 📝, 🎯, 🔥, etc.). A interface deve ser estritamente textual, limpa e profissional.
+- **Sem Previews Desnecessários / Sem Placeholders Ruidosos**: Não adicione textos de preview, placeholders prolixos ou textos fantasmas que poluam campos de entrada (`textarea`, `input`). A caixa de texto de mensagens e campos de formulário devem ser limpos e diretos.
 - **Ultra-Minimalist Light Mode**: Plain semantic HTML (`<table>`, `<p>`, `<strong>`, `<input>`, `<button>`). Background `#ffffff`, text `#111111`, subtle `#ccc` borders.
-- **Zero Gamification**: No streak counters, no fire/flame icons ("foguinho"), no progress bars, no badges.
-- **No Clutter**: No decorative logos, no captions/legends, no canned suggestion chips, no placeholder tips instructing what to ask.
-- **Uniform Typography**: Form inputs, textareas, and buttons must inherit project font size (`font-family: inherit; font-size: 0.95rem;`).
-- **Furigana Rendering**: Furigana rendered via standard `<ruby>漢字<rt>かんじ</rt></ruby>`. Toggleable between hover mode (`ruby:hover rt`) and always visible.
-- **New Vocabulary Highlighting**: Japanese words not present in the user's Anki collection are automatically tagged with the `vocab-new` class and styled in subtle blue (`#1a66cc`). Toggleable via header button ("Novos Termos: Azul | Normal") and saved in `localStorage`. Zero-overhead in-memory O(1) set lookup.
-- **Quizzes**: Mode selection must be a **multiselect** (allowing users to pick any combination of Multiple Choice, Cloze, Free Composition).
+- **Zero Gamification**: Sem streak counters, sem ícones de fogo ("foguinho"), sem barras de progresso artificiais, sem badges.
+- **Sem Poluição Visual**: Sem logos decorativos, sem legendas redundantes, sem chips de sugestão forçados.
+- **Tipografia Uniforme**: Entradas de formulário, textareas e botões herdam tamanho e fonte do sistema (`font-family: inherit; font-size: 0.95rem;`).
+- **Furigana Rendering**: Furigana renderizado via `<ruby>漢字<rt>かんじ</rt></ruby>`, alternável entre modo hover (`ruby:hover rt`) e sempre visível.
+- **Destaque de Vocabulário Novo**: Palavras japonesas ausentes da coleção do Anki recebem classe `vocab-new` com azul sutil (`#1a66cc`), alternável via cabeçalho.
+- **Quizzes**: Seleção de modo via checkboxes multiselect simples (Múltipla Escolha, Cloze, Composição Livre).
 
 ---
 

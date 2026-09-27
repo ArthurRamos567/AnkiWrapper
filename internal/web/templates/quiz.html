@@ -35,14 +35,14 @@
                 <input type="text" name="topic" id="topic-input" value="{{.SelectedTopic}}" placeholder="Ex: Gramática Geral, Verbos..." style="width: 260px; padding: 3px 6px;">
                 <label for="count-input" style="font-size: 0.85rem; color: #555; margin-left: 0.25rem;">Qtd:</label>
                 <input type="number" name="count" id="count-input" value="1" min="1" max="50" style="width: 50px; padding: 3px 6px;">
-                <button type="button" id="btn-toggle-attach" onclick="toggleAttachChat()" style="font-size: 0.85rem; padding: 3px 8px; background: {{if .AttachedSessionID}}#e8f0fe{{else}}#f5f5f5{{end}}; border: 1px solid {{if .AttachedSessionID}}#0055aa{{else}}#ccc{{end}}; color: {{if .AttachedSessionID}}#0055aa{{else}}#333{{end}}; cursor: pointer;">📎 {{if .AttachedSessionID}}Conversa Anexada{{else}}Anexar Conversa{{end}}</button>
+                <button type="button" id="btn-toggle-attach" onclick="toggleAttachChat()" style="font-size: 0.85rem; padding: 3px 8px; background: {{if .AttachedSessionID}}#e8f0fe{{else}}#f5f5f5{{end}}; border: 1px solid {{if .AttachedSessionID}}#0055aa{{else}}#ccc{{end}}; color: {{if .AttachedSessionID}}#0055aa{{else}}#333{{end}}; cursor: pointer;">{{if .AttachedSessionID}}Conversa Anexada{{else}}Anexar Conversa{{end}}</button>
                 <button type="submit">Gerar</button>
                 <span id="loading-spinner" class="htmx-indicator">Gerando...</span>
             </div>
 
             <!-- Attached Chat Session Box -->
             <div id="attach-chat-box" style="display: {{if .AttachedSessionID}}flex{{else}}none{{end}}; align-items: center; gap: 0.5rem; background: #eef4fc; border: 1px solid #b8d4fe; padding: 0.35rem 0.6rem; border-radius: 4px; font-size: 0.85rem; flex-wrap: wrap;">
-                <span style="font-weight: 500; color: #0055aa;">📎 Contexto do Chat:</span>
+                <span style="font-weight: 500; color: #0055aa;">Contexto do Chat:</span>
                 <select name="chat_session_id" id="chat-session-select" style="font-size: 0.85rem; padding: 2px 4px; max-width: 320px;">
                     <option value="">-- Selecione uma conversa --</option>
                     {{range .ChatSessions}}
@@ -130,7 +130,7 @@ function toggleAttachChat() {
         btn.style.borderColor = '#0055aa';
         btn.style.color = '#0055aa';
         btn.style.background = '#e8f0fe';
-        btn.textContent = '📎 Conversa Anexada';
+        btn.textContent = 'Conversa Anexada';
         if (!select.value && select.options.length > 1) {
             select.selectedIndex = 1;
             const topicInput = document.getElementById('topic-input');
@@ -152,7 +152,7 @@ function detachChat() {
     btn.style.borderColor = '#ccc';
     btn.style.color = '#333';
     btn.style.background = '#f5f5f5';
-    btn.textContent = '📎 Anexar Conversa';
+    btn.textContent = 'Anexar Conversa';
     select.value = '';
 }
 
